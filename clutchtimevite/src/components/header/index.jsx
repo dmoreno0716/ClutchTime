@@ -13,7 +13,6 @@ const Header = () => {
         gap: '8px',
         width: '100%',
         zIndex: '20',
-        position: 'fixed',
         top: '0',
         left: '0',
         height: '48px',
