@@ -8,7 +8,6 @@ import { useAuth } from "../../../contexts/authContext";
 
 const Login = () => {
   const { userLoggedIn } = useAuth();
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -146,7 +145,6 @@ const Login = () => {
         Back
       </Link>
       {userLoggedIn && <Navigate to={"/home"} replace={true} />}
-
       <main style={mainStyle}>
         <div style={containerStyle}>
           <h3 style={headerStyle}>Welcome Back</h3>
