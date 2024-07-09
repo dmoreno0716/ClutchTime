@@ -6,6 +6,7 @@ import Home from "./components/home";
 import "./App.css";
 import { AuthProvider } from "./contexts/authContext";
 import Test from "./apiTests";
+import Feed from "./components/feed";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/register" element={<Register />} />
             <Route path="/home" element={<Home />} />
             <Route path="*" element={<Login />} />
+            <Route path="/feed" element={<Feed />} />
           </Routes>
         </div>
       </AuthProvider>
