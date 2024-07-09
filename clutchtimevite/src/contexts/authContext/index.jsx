@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
   const [isEmailUser, setIsEmailUser] = useState(false);
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [profileImg, setProfileImg] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, initializeUser);
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
         if (userDoc.exists()) {
           const userData = userDoc.data();
           setFullName(userData.fullName || "");
+          setProfileImg(userData.profileImg || "");
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -55,6 +57,7 @@ export function AuthProvider({ children }) {
     currentUser,
     setCurrentUser,
     fullName,
+    profileImg,
   };
 
   return (
