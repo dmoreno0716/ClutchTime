@@ -1,8 +1,47 @@
 import { useAuth } from "../../contexts/authContext";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Sidebar from "../Sidebar";
+import { fetchUserData } from "../../services/hooks/fetchUserData";
+import { followUser, unFollowUser } from "../../services/api/followUser";
+import { favoriteTeam, unFavoriteTeam } from "../../services/api/favoriteTeam";
+import ProfileInfo from "../apiTests/Profileinfo";
+
+import {
+  fetchUpcomingLeagueInfo,
+  fetchAllFinishedGamesInLeagueInfo,
+  fetchPinnedMatchesInfo,
+  fetchScheduledGamesInLeagueInfo,
+} from "../../services/api/getMatchDetails";
 
 const Home = () => {
+  const [userData, setUserData] = useState({
+    fullName: "NAME",
+    profileImg: "IMAGEURL",
+    following: [],
+    followers: [],
+    favoriteTeams: [],
+  });
+  const [leagueData, setLeagueData] = useState([]);
+  const [upcomingLeagueData, setUpcomingLeagueData] = useState();
+  const [finishedGamesInleagueData, setFinishedGamesInleagueData] = useState(
+    []
+  );
+  const [scheduledGamesInleagueData, setScheduledGamesInleagueData] = useState(
+    []
+  );
+  const [pinnedMatchesData, setPinnedMatchesData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (isLoading) {
+      fetchScheduledGamesInLeagueInfo(
+        setScheduledGamesInleagueData,
+        "CA2024",
+        "2024"
+      );
+    }
+  }, [isLoading]);
+
   const appStyle = {
     display: "flex",
     height: "100vh",
@@ -27,7 +66,6 @@ const Home = () => {
   const rightColumnStyle = {
     flex: 1,
     padding: "60px",
-    // borderLeft: '1px solid white',
     display: "flex",
     flexDirection: "column",
   };
@@ -192,23 +230,34 @@ const Home = () => {
               <button style={filterButtonStyle}>Olympics</button>
             </div>
             {/* Game Cards */}
-            <div style={gameCardStyle}>
-              <p>4:30 28 Aug LIVE</p>
-              <p>Atletico madrid 2:3 Eibar</p>
-            </div>
-            <div style={gameCardStyle}>
-              <p>3:02 28 Aug</p>
-              <p>Real Valladolid 2:3 Mallorca</p>
-            </div>
-            <div style={gameCardStyle}>
-              <p>3:02 28 Aug</p>
-              <p>Leganes 2:3 Alaves</p>
-            </div>
-            <div style={gameCardStyle}>
-              <p>3:02 28 Aug</p>
-              <p>Villarreal 2:3 Athletic Bilbao</p>
-            </div>
           </div>
+          <ul>
+            {scheduledGamesInleagueData.map((match) => (
+              <li key={match.matchID} style={gameCardStyle}>
+                <img
+                  src={match.team1.teamIconUrl}
+                  alt={`${match.team1.teamName} logo`}
+                  style={{ width: "30px", height: "30px" }}
+                />
+                {match.team1.teamName}
+                {" vs "}
+                {match.team2.teamName}
+                <img
+                  src={match.team2.teamIconUrl}
+                  alt={`${match.team2.teamName} logo`}
+                  style={{ width: "30px", height: "30px" }}
+                />
+                <ul>
+                  <div>
+                    {match.matchResults[0]?.pointsTeam1 || "0"}
+                    {" - "}
+                    {match.matchResults[0]?.pointsTeam2 || "0"}
+                  </div>
+                  <div>{match.matchDateTime}</div>
+                </ul>
+              </li>
+            ))}
+          </ul>
         </div>
 
         <div style={rightColumnStyle}>
