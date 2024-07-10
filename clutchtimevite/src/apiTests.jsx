@@ -11,6 +11,7 @@ import {
   fetchUpcomingLeagueInfo,
 } from "./services/api/getMatchDetails";
 import { auth } from "./firebase/firebase";
+import { fetchNewsInfo } from "./services/api/getNewsInfo";
 
 function Test() {
   const [userData, setUserData] = useState({
@@ -20,6 +21,7 @@ function Test() {
     followers: [],
     favoriteTeams: [],
   });
+  const [newsData, setNewsData] = useState([]);
   const [leagueData, setLeagueData] = useState([]);
   const [upcomingLeagueData, setUpcomingLeagueData] = useState();
   const [finishedGamesInleagueData, setFinishedGamesInleagueData] = useState(
@@ -52,6 +54,10 @@ function Test() {
         "2024",
         auth.currentUser.uid
       );
+
+      //NEWS INFO
+
+      fetchNewsInfo(setNewsData, "espn");
     }
   }, [isLoading]);
 
@@ -258,14 +264,14 @@ function Test() {
           <li>
             All News:
             <ul>
-              <li>News Picture:</li>
-              <li>News Source Name:</li>
-              <li>News Title:</li>
-              <li>News Desc:</li>
+              {newsData.map((news, index) => (
+                <li key={index}>
+                  <p>{news.title}</p>
+                  <p>{news.url}</p>
+                </li>
+              ))}
             </ul>
           </li>
-          <li>Hot News: </li>
-          <li>Transfer News: </li>
         </ul>
       </div>
     </div>
