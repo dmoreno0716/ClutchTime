@@ -5,6 +5,7 @@ import { fetchUserData } from "../../services/hooks/fetchUserData";
 import { followUser, unFollowUser } from "../../services/api/followUser";
 import { favoriteTeam, unFavoriteTeam } from "../../services/api/favoriteTeam";
 import ProfileInfo from "../apiTests/Profileinfo";
+import { auth } from "../../firebase/firebase";
 
 import {
   fetchUpcomingLeagueInfo,
@@ -36,7 +37,7 @@ const Home = () => {
     if (isLoading) {
       fetchScheduledGamesInLeagueInfo(
         setScheduledGamesInleagueData,
-        "CA2024",
+        "em",
         "2024"
       );
     }
