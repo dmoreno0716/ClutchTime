@@ -39,6 +39,7 @@ export function AuthProvider({ children }) {
           const userData = userDoc.data();
           setFullName(userData.fullName || "");
           setProfileImg(userData.profileImg || "");
+
         }
       } catch (error) {
         console.error("Error fetching user data:", error);
