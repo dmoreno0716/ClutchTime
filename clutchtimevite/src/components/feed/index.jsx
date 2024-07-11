@@ -1,5 +1,21 @@
 import React, { useState } from "react";
 import Sidebar from "../Sidebar";
+import { useEffect, useCallback } from "react";
+import { useInView } from "react-intersection-observer";
+import { useAuth } from "../../contexts/authContext";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  updateDoc,
+  doc,
+  arrayUnion,
+  startAfter,
+} from "firebase/firestore";
+import { db } from "../../firebase/firebase";
 
 const styles = {
   app: {
@@ -126,101 +142,140 @@ const styles = {
     borderRadius: "20px",
     cursor: "pointer",
   },
+  loadingMore: {
+    textAlign: "center",
+    padding: "20px",
+    color: "#8899a6",
+  },
 };
 
 const Feed = () => {
-  const [posts, setPosts] = useState([
-    {
-      id: 1,
-      user: "Designsta",
-      username: "@inner",
-      content: "Twitterdagi ayol-erkak qarama-qarshiliginlardan o",
-      time: "25m",
-      likes: 8,
-      comments: 10,
-      retweets: 1,
-    },
-    {
-      id: 2,
-      user: "cloutexhibition",
-      username: "@RajLaboti",
-      content: "YPIP dasturining bu yilgi sezoni ham o",
-      time: "22m",
-      likes: 4,
-      comments: 0,
-      retweets: 5,
-    },
-    {
-      id: 3,
-      user: "CreativePhoto",
-      username: "@cloutexhibition",
-      content: "Real Madrid will win 2-0 against Barca!!",
-      time: "1h",
-      likes: 9,
-      comments: 0,
-      retweets: 5,
-      matchData: {
-        status: "LIVE",
-        teamA: "Australia",
-        teamB: "England",
-        scoreA: 2,
-        scoreB: 0,
-      },
-    },
-  ]);
+  const { currentUser } = useAuth();
+  const [posts, setPosts] = useState([]);
+  const [comment, setComment] = useState("");
+  const [lastVisible, setLastVisible] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
-  const [prediction, setPrediction] = useState("");
+  const { ref, inView } = useInView({
+    threshold: 0,
+  });
 
-  const [transfers, setTransfers] = useState([
-    {
-      id: 1,
-      title: "Results And Scores From The Premier League...!!",
-      time: "5 Hours Ago",
-    },
-    {
-      id: 2,
-      title: "Here Are The Top 100 Players And Managers",
-      time: "11 Oct 2023, 06:00 AM",
-    },
-    {
-      id: 3,
-      title: "Results And Scores From The Premier League...!!",
-      time: "10 Oct 2023, 08:00 PM",
-    },
-    {
-      id: 4,
-      title: "Join Or Start A Competition Now!",
-      time: "10 Oct 2023, 02:40 PM",
-    },
-  ]);
+  const fetchPosts = useCallback(
+    async (lastDoc = null) => {
+      if (!currentUser || loading || !hasMore) return;
 
-  const handleLike = (postId) => {
-    setPosts(
-      posts.map((post) =>
-        post.id === postId ? { ...post, likes: post.likes + 1 } : post
-      )
-    );
-  };
+      console.log("Current user:", currentUser); // Log the current user object
 
-  const handlePredictionChange = (e) => {
-    setPrediction(e.target.value);
-  };
+      setLoading(true);
+      const postsRef = collection(db, "posts");
 
-  const handlePostPrediction = () => {
-    if (prediction.trim() !== "") {
-      const newPost = {
-        id: posts.length + 1,
-        user: "John Doe", // Replace with actual user name
-        username: "@johndoe", // Replace with actual username
-        content: prediction,
-        time: "Just now",
-        likes: 0,
-        comments: 0,
-        retweets: 0,
-      };
-      setPosts([newPost, ...posts]);
-      setPrediction("");
+      // Check if the required properties exist and are arrays
+      const favoriteTeams = Array.isArray(currentUser.favoriteTeams)
+        ? currentUser.favoriteTeams
+        : [];
+      const favoritePlayers = Array.isArray(currentUser.favoritePlayers)
+        ? currentUser.favoritePlayers
+        : [];
+      const following = Array.isArray(currentUser.following)
+        ? currentUser.following
+        : [];
+
+      console.log("Favorite teams:", favoriteTeams);
+      console.log("Favorite players:", favoritePlayers);
+      console.log("Following:", following);
+
+      const relevantItems = [
+        ...favoriteTeams,
+        ...favoritePlayers,
+        ...following,
+        currentUser.uid,
+      ];
+
+      let q;
+      if (relevantItems.length > 0) {
+        q = query(
+          postsRef,
+          where("relevantTo", "array-contains-any", relevantItems),
+          orderBy("timestamp", "desc"),
+          limit(10)
+        );
+      } else {
+        q = query(postsRef, orderBy("timestamp", "desc"), limit(10));
+      }
+
+      if (lastDoc) {
+        q = query(q, startAfter(lastDoc));
+      }
+
+      try {
+        const querySnapshot = await getDocs(q);
+        const fetchedPosts = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        console.log("Fetched posts:", fetchedPosts); // Log the fetched posts
+
+        setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
+        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
+        setHasMore(querySnapshot.docs.length === 10);
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [currentUser, hasMore]
+  );
+
+  useEffect(() => {
+    if (currentUser && !loading && hasMore) {
+      fetchPosts();
     }
+  }, [currentUser, fetchPosts, loading, hasMore]);
+
+  useEffect(() => {
+    if (inView && !loading && hasMore) {
+      fetchPosts(lastVisible);
+    }
+  }, [inView, fetchPosts, lastVisible, loading, hasMore]);
+
+  const handleLike = async (postId) => {
+    const postRef = doc(db, "posts", postId);
+    await updateDoc(postRef, {
+      likes: arrayUnion(currentUser.uid),
+    });
+    // Fetch related posts based on the liked post
+    const likedPost = posts.find((post) => post.id === postId);
+    if (likedPost) {
+      const relatedPostsQuery = query(
+        collection(db, "posts"),
+        where("type", "==", likedPost.type),
+        where("relevantTo", "array-contains-any", likedPost.relevantTo),
+        limit(5)
+      );
+      const relatedSnapshot = await getDocs(relatedPostsQuery);
+      const relatedPosts = relatedSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setPosts((prevPosts) => [...prevPosts, ...relatedPosts]);
+    }
+  };
+
+  const handleComment = async (postId) => {
+    if (comment.trim() === "") return;
+    const postRef = doc(db, "posts", postId);
+    await updateDoc(postRef, {
+      comments: arrayUnion({
+        user: currentUser.displayName,
+        content: comment,
+        timestamp: new Date(),
+      }),
+    });
+    setComment("");
+    fetchPosts(); // Refetch posts to show new comment
   };
 
   return (
@@ -228,23 +283,10 @@ const Feed = () => {
       <Sidebar />
       <div style={styles.mainContent}>
         <div style={styles.feed}>
-          <div style={styles.createPost}>
-            <h2>Home</h2>
-            <input
-              type="text"
-              value={prediction}
-              onChange={handlePredictionChange}
-              placeholder="Make a prediction..."
-              style={styles.predictionInput}
-            />
-            <button onClick={handlePostPrediction} style={styles.postButton}>
-              Post Prediction
-            </button>
-          </div>
           {posts.map((post) => (
             <div key={post.id} style={styles.post}>
               <img
-                src={`https://via.placeholder.com/40`}
+                src={post.userAvatar || `https://via.placeholder.com/40`}
                 alt={post.user}
                 style={styles.avatar}
               />
@@ -252,58 +294,69 @@ const Feed = () => {
                 <div style={styles.postHeader}>
                   <span style={styles.userName}>{post.user}</span>
                   <span style={styles.userHandle}>{post.username}</span>
-                  <span style={styles.postTime}>{post.time}</span>
+                  <span style={styles.postTime}>
+                    {post.timestamp.toDate().toLocaleString()}
+                  </span>
                 </div>
                 <p>{post.content}</p>
-                {post.matchData && (
+                {post.type === "match" && (
                   <div style={styles.matchData}>
-                    <span style={styles.liveIndicator}>LIVE</span>
+                    <span style={styles.liveIndicator}>{post.matchStatus}</span>
                     <div style={styles.teams}>
                       <div>
-                        {post.matchData.teamA} {post.matchData.scoreA}
+                        {post.teamA} {post.scoreA}
                       </div>
                       <div>
-                        {post.matchData.teamB} {post.matchData.scoreB}
+                        {post.teamB} {post.scoreB}
                       </div>
                     </div>
                   </div>
                 )}
+                {post.type === "news" && post.imageUrl && (
+                  <img
+                    src={post.imageUrl}
+                    alt="News"
+                    style={{ width: "100%", borderRadius: "10px" }}
+                  />
+                )}
                 <div style={styles.postActions}>
                   <button style={styles.actionButton}>
-                    {post.comments} Comments
-                  </button>
-                  <button style={styles.actionButton}>
-                    {post.retweets} Retweets
+                    {post.comments ? post.comments.length : 0} Comments
                   </button>
                   <button
                     style={styles.actionButton}
                     onClick={() => handleLike(post.id)}
                   >
-                    {post.likes} Likes
+                    {post.likes ? post.likes.length : 0} Likes
                   </button>
-                  <button style={styles.actionButton}>Share</button>
                 </div>
+                {post.comments &&
+                  post.comments.map((comment, index) => (
+                    <div key={index} style={styles.comment}>
+                      <strong>{comment.user}: </strong>
+                      {comment.content}
+                    </div>
+                  ))}
+                <input
+                  type="text"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Add a comment..."
+                  style={styles.commentInput}
+                />
+                <button
+                  onClick={() => handleComment(post.id)}
+                  style={styles.postButton}
+                >
+                  Comment
+                </button>
               </div>
             </div>
           ))}
-        </div>
-      </div>
-      <div style={styles.rightSidebar}>
-        <div>
-          <input
-            type="text"
-            placeholder="Search Feed..."
-            style={styles.searchBar}
-          />
-        </div>
-        <div style={styles.transfers}>
-          <h3>My Teams Transfers</h3>
-          {transfers.map((transfer) => (
-            <div key={transfer.id} style={styles.transferItem}>
-              <h4 style={styles.transferTitle}>{transfer.title}</h4>
-              <span style={styles.transferTime}>{transfer.time}</span>
-            </div>
-          ))}
+          {loading && (
+            <div style={styles.loadingMore}>Loading More Posts...</div>
+          )}
+          <div ref={ref} style={{ height: "20px " }}></div>
         </div>
       </div>
     </div>
