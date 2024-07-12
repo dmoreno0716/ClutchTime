@@ -14,4 +14,12 @@ router.get("/source/:source", async (req, res) => {
   res.send(response.data);
 });
 
+router.get("source/:source", async (req, res) => {
+  const { source } = req.params;
+  const response = await axios.get(
+    `https://footballnewsapi.netlify.app/.netlify/functions/api/news/fourfourtwo/${source}`
+  );
+  res.send(response.data);
+});
+
 module.exports = router;

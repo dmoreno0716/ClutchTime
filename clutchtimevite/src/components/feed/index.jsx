@@ -12,8 +12,11 @@ import {
   getDocs,
   updateDoc,
   doc,
+  getDoc,
   arrayUnion,
   startAfter,
+  addDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 
@@ -165,68 +168,77 @@ const Feed = () => {
     async (lastDoc = null) => {
       if (!currentUser || loading || !hasMore) return;
 
-      console.log("Current user:", currentUser); // Log the current user object
+      console.log("Fetching posts for user: ", currentUser.uid); //logging current user object
 
       setLoading(true);
       const postsRef = collection(db, "posts");
 
-      // Check if the required properties exist and are arrays
-      const favoriteTeams = Array.isArray(currentUser.favoriteTeams)
-        ? currentUser.favoriteTeams
-        : [];
-      const favoritePlayers = Array.isArray(currentUser.favoritePlayers)
-        ? currentUser.favoritePlayers
-        : [];
-      const following = Array.isArray(currentUser.following)
-        ? currentUser.following
-        : [];
+      try {
+        // const userDoc = await getDocs(doc(db, "users", currentUser.uid));
+        // const userData = userDoc.data();
+        const userDocRef = doc(db, "users", currentUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
 
-      console.log("Favorite teams:", favoriteTeams);
-      console.log("Favorite players:", favoritePlayers);
-      console.log("Following:", following);
+        if (!userDocSnap.exists()) {
+          console.error("User document does not exist");
+          setLoading(false);
+          return;
+        }
+        const userData = userDocSnap.data();
+        console.log("User data: ", userData); //logging user data to test
 
-      const relevantItems = [
-        ...favoriteTeams,
-        ...favoritePlayers,
-        ...following,
-        currentUser.uid,
-      ];
+        const following = userData.followingUsers || [];
+        console.log("Following users: ", following); //logging to see if data is being picked up
 
-      let q;
-      if (relevantItems.length > 0) {
-        q = query(
+        let q = query(
           postsRef,
-          where("relevantTo", "array-contains-any", relevantItems),
+          where("authorId", "in", [currentUser.uid, ...following]),
           orderBy("timestamp", "desc"),
           limit(10)
         );
-      } else {
-        q = query(postsRef, orderBy("timestamp", "desc"), limit(10));
-      }
 
-      if (lastDoc) {
-        q = query(q, startAfter(lastDoc));
-      }
+        if (lastDoc) {
+          q = query(q, startAfter(lastDoc));
+        }
 
-      try {
         const querySnapshot = await getDocs(q);
-        const fetchedPosts = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
+        console.log("Query snapshot size: ", querySnapshot.size); //logging query snapshot size
 
-        console.log("Fetched posts:", fetchedPosts); // Log the fetched posts
+        const fetchedPosts = await Promise.all(
+          querySnapshot.docs.map(async (postDoc) => {
+            const postData = postDoc.data();
+            console.log("Post data: ", postData); //logging to see if post data is being read
+
+            const authorDocRef = doc(db, "users", postData.authorId);
+            const authorDocSnap = await getDoc(authorDocRef);
+            const authorData = authorDocSnap.exists()
+              ? authorDocSnap.data()
+              : {};
+
+            return {
+              id: postDoc.id,
+              ...postData,
+              author: {
+                id: postData.authorId,
+                fullName: authorData.fullName || "Unknown User",
+                profileImg: authorData.profileImg || null,
+              },
+            };
+          })
+        );
+
+        console.log("Fetched posts: ", fetchedPosts); //logging to see if posts got fetched
 
         setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
         setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
         setHasMore(querySnapshot.docs.length === 10);
       } catch (error) {
-        console.error("Error fetching posts:", error);
+        console.error("Error fetching posts", error);
       } finally {
         setLoading(false);
       }
     },
-    [currentUser, hasMore]
+    [currentUser, loading, hasMore]
   );
 
   useEffect(() => {
@@ -246,7 +258,7 @@ const Feed = () => {
     await updateDoc(postRef, {
       likes: arrayUnion(currentUser.uid),
     });
-    // Fetch related posts based on the liked post
+    // fetch related posts based on the liked post
     const likedPost = posts.find((post) => post.id === postId);
     if (likedPost) {
       const relatedPostsQuery = query(
@@ -269,13 +281,38 @@ const Feed = () => {
     const postRef = doc(db, "posts", postId);
     await updateDoc(postRef, {
       comments: arrayUnion({
-        user: currentUser.displayName,
+        user: currentUser.fullName,
         content: comment,
         timestamp: new Date(),
       }),
     });
     setComment("");
-    fetchPosts(); // Refetch posts to show new comment
+    fetchPosts(); // re-fetch posts to show new comment
+  };
+
+  const createPost = async (content) => {
+    try {
+      await addDoc(collection(db, "posts"), {
+        authorId: currentUser.uid,
+        content: content,
+        timestamp: serverTimestamp(),
+        likes: [],
+        comments: [],
+      });
+    } catch (error) {
+      console.error("Error creating post", error);
+    }
+  };
+
+  const followUser = async (userIdToFollow) => {
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, {
+        followingUsers: arrayUnion(userIdToFollow),
+      });
+    } catch (error) {
+      console.error("Error following user: ", error);
+    }
   };
 
   return (
@@ -286,16 +323,17 @@ const Feed = () => {
           {posts.map((post) => (
             <div key={post.id} style={styles.post}>
               <img
-                src={post.userAvatar || `https://via.placeholder.com/40`}
-                alt={post.user}
+                src={post.author.profileImg || `https://via.placeholder.com/40`}
+                alt={postauthor.fullName}
                 style={styles.avatar}
               />
               <div style={styles.postContent}>
                 <div style={styles.postHeader}>
-                  <span style={styles.userName}>{post.user}</span>
-                  <span style={styles.userHandle}>{post.username}</span>
+                  <span style={styles.userName}>{post.author.fullName}</span>
                   <span style={styles.postTime}>
-                    {post.timestamp.toDate().toLocaleString()}
+                    {post.timestamp && post.timestamp.toDate
+                      ? post.timestamp.toDate().toLocaleString()
+                      : "unknown time"}
                   </span>
                 </div>
                 <p>{post.content}</p>
