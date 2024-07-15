@@ -2,9 +2,13 @@ import React, { useState } from "react";
 import { Navigate, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../contexts/authContext";
 import { doCreateUserWithEmailAndPassword } from "../../../firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../../../firebase/firebase";
+import { favoriteTeam } from "../../../services/api/favoriteTeam";
 
 const Register = () => {
   const navigate = useNavigate();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setconfirmPassword] = useState("");
@@ -14,9 +18,40 @@ const Register = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      setErrorMessage("Passwords do not match.");
+      return;
+    }
+
     if (!isRegistering) {
       setIsRegistering(true);
-      await doCreateUserWithEmailAndPassword(email, password);
+      setErrorMessage("");
+      try {
+        //creating user in firebase auth
+        const userCredential = await doCreateUserWithEmailAndPassword(
+          email,
+          password
+        );
+        const user = userCredential.user;
+
+        //creating user in firestore db
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          fullName: fullName,
+          favoriteTeams: [],
+          followedLeagues: [],
+          followers: [],
+          followingUsers: [],
+          hasSelectedLeagues: false,
+          profileImg: "", //default profileImg goes here
+        });
+        navigate("/select-leagues");
+      } catch (error) {
+        console.error("Error during registration: ", error);
+        setErrorMessage(error.message);
+      } finally {
+        setIsRegistering(false);
+      }
     }
   };
 
@@ -116,6 +151,17 @@ const Register = () => {
           </div>
           <form onSubmit={onSubmit} style={formStyle}>
             <div>
+              <div>
+                <label style={labelStyle}>Full Name</label>
+                <input
+                  type="text"
+                  autoComplete="name"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  style={inputStyle}
+                ></input>
+              </div>
               <label style={labelStyle}>Email</label>
               <input
                 type="email"
@@ -158,7 +204,6 @@ const Register = () => {
                 style={inputStyle}
               />
             </div>
-
             {errorMessage && (
               <span style={{ color: "#DC2626", fontWeight: "bold" }}>
                 {errorMessage}
