@@ -19,7 +19,11 @@ export const fetchLaLigaNews = async (setNewsData) => {
       `http://localhost:3002/news/fourfourtwo/laliga`
     );
     console.log("La Liga news data: ", response.data);
-    return response.data;
+    return response.data.map((item) => ({
+      ...item,
+      likes: [],
+      comments: [],
+    }));
   } catch (error) {
     console.error("Error fetching La Liga news info", error);
     throw error;
@@ -45,7 +49,11 @@ export const fetchBundesligaNews = async (setNewsData) => {
       `http://localhost:3002/news/fourfourtwo/bundesliga`
     );
     console.log("Bundesliga news data: ", response.data);
-    return response.data;
+    return response.data.map((item) => ({
+      ...item,
+      likes: [],
+      comments: [],
+    }));
   } catch (error) {
     console.error("Error fetching Bundesliga news info", error);
     throw error;

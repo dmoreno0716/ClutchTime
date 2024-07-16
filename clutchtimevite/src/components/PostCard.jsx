@@ -1,6 +1,9 @@
-const PostCard = ({ newsItem, onLike, onComment, styles }) => {
+import React, { useState } from "react";
+
+const PostCard = ({ newsItem, onLike, onComment }) => {
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState("");
+
   const styles = {
     postCard: {
       backgroundColor: "#f0f0f0",
@@ -13,7 +16,8 @@ const PostCard = ({ newsItem, onLike, onComment, styles }) => {
       marginBottom: "10px",
     },
     postLeague: {
-      fontSize: "18px",
+      fontSize: "14px",
+      color: "#666",
       marginBottom: "10px",
     },
     postDescription: {
@@ -24,81 +28,95 @@ const PostCard = ({ newsItem, onLike, onComment, styles }) => {
       color: "#0066cc",
       textDecoration: "none",
     },
+    postActions: {
+      display: "flex",
+      justifyContent: "space-between",
+      marginTop: "10px",
+    },
+    actionButton: {
+      background: "none",
+      border: "none",
+      color: "#0066cc",
+      cursor: "pointer",
+    },
+    comment: {
+      backgroundColor: "#e6e6e6",
+      borderRadius: "4px",
+      padding: "5px",
+      marginBottom: "5px",
+    },
+    commentInput: {
+      width: "100%",
+      padding: "5px",
+      marginBottom: "5px",
+    },
+    postButton: {
+      backgroundColor: "#0066cc",
+      color: "white",
+      border: "none",
+      padding: "5px 10px",
+      borderRadius: "4px",
+      cursor: "pointer",
+    },
   };
 
-  //   const handleNewsLike = async (newsItem) => {
-  //     const updatedNews = news.map((item) =>
-  //       item.id === newsItem.id
-  //         ? { ...item, likes: [...item.likes, currentUser.uid] }
-  //         : item
-  //     );
-  //     setNews(updatedNews);
-
-  //update to database
-  // };
-
-  //   const handleNewsComment = async (newsItem, comment) => {
-  //     const updatedNews = news.map((item) =>
-  //       item.id === newsItem.id
-  //         ? {
-  //             ...item,
-  //             comments: [
-  //               ...item.comments,
-  //               { user: currentUser.uid, content: comment },
-  //             ],
-  //           }
-  //         : item
-  //     );
-  //     setNews(updatedNews);
-  //update to database
-  // };
+  console.log("Rendering PostCard with newsItem:", newsItem);
 
   return (
-    <div style={styles.postCard}>
-      <h3 style={styles.postTitle}>{newsItem.title}</h3>
-      <p style={styles.postLeague}>{newsItem.league.toUpperCase()}</p>
-      <p style={styles.postDescription}>{newsItem.description}</p>
-      <a
-        href={newsItem.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={styles.postLink}
-      >
-        Read more
-      </a>
-      <div style={styles.postActions}>
-        <button
-          onClick={() => setShowComments(!showComments)}
-          style={styles.actionButton}
-        >
-          {newsItem.comments.length} Comments
-        </button>
-      </div>
-      {showComments && (
-        <div>
-          {newsItem.comments.map((comment, index) => (
-            <div key={index} style={styles.comment}>
-              <strong>{comment.user}: </strong> {comment.content}
-            </div>
-          ))}
-          <input
-            type="text"
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add a comment..."
-            style={styles.commentInput}
-          ></input>
+    <div>
+      <div style={styles.postCard}>
+        <h3 style={styles.postTitle}>{newsItem.title}</h3>
+        <p style={styles.postLeague}>{newsItem.league.toUpperCase()}</p>
+        <p style={styles.postDescription}>{newsItem.description}</p>
+        <a>
+          href={newsItem.url}
+          target="_blank" rel="noopener noreferrer" style={styles.postLink}
+          Read more
+        </a>
+        <div style={styles.postActions}>
+          <button onClick={() => onLike(newsItem)} style={styles.actionButton}>
+            {newsItem.likes ? newsItem.likes.length : 0} Likes
+          </button>
           <button
-            onClick={() => {
-              handleNewsComment(newsItem, newComment);
-              setNewComment("");
-            }}
-            style={styles.postButton}
+            onClick={() => setShowComments(!showComments)}
+            style={styles.actionButton}
           >
-            Comment
+            {newsItem.comments ? newsItem.comments.length : 0} Comments
           </button>
         </div>
-      )}
+        {showComments && (
+          <div>
+            {newsItem.comments && newsItem.comments.length > 0 ? (
+              newsItem.comments.map((comment, index) => (
+                <div key={index} style={styles.comment}>
+                  <strong>{comment.user}: </strong>
+                  {comment.content}
+                </div>
+              ))
+            ) : (
+              <p>No comments yet.</p>
+            )}
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              style={styles.commentInput}
+            />
+            <button
+              onClick={() => {
+                onComment(newsItem, newComment);
+                setNewComment("");
+              }}
+              style={styles.postButton}
+            >
+              Comment
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
+
+export default PostCard;
