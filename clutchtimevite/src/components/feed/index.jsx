@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   arrayUnion,
+  arrayRemove,
   startAfter,
   addDoc,
   serverTimestamp,
@@ -207,6 +208,8 @@ const Feed = () => {
   const { currentUser } = useAuth();
   const [posts, setPosts] = useState([]);
   const [comment, setComment] = useState("");
+  const [newComment, setNewComment] = useState("");
+  const [showComments, setShowComments] = useState(false);
   const [lastVisible, setLastVisible] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -312,7 +315,6 @@ const Feed = () => {
       if (currentUser) {
         let allNews = [];
         try {
-          //fetches users followed leagues
           const userRef = doc(db, "users", currentUser.uid);
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
@@ -320,6 +322,7 @@ const Feed = () => {
             setFollowedLeagues(userData.followedLeagues || []);
 
             //fetches news for followed leagues
+            let newsId = 1;
 
             for (const league of userData.followedLeagues) {
               let leagueNews;
@@ -346,6 +349,7 @@ const Feed = () => {
                   ...leagueNews.map((news) => ({
                     ...news,
                     league,
+                    id: `news_${newsId++}`, //assigns unique ID to each news item
                     likes: news.likes || [],
                     comments: news.comments || [],
                   })),
@@ -353,6 +357,20 @@ const Feed = () => {
               }
             }
           }
+          const newsRef = collection(db, "news");
+          const newsSnapshot = await getDocs(newsRef);
+          const firestoreNews = newsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          //merge fetched news with firestore data
+          allNews = allNews.map((news) => {
+            const firestoreItem = firestoreNews.find(
+              (item) => item.id === news.id
+            );
+            return firestoreItem ? { ...news, ...firestoreItem } : news;
+          });
+
           console.log("fetched news: ", allNews);
           //sorts news by date if needed
           allNews.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -379,57 +397,97 @@ const Feed = () => {
   }, [news, posts]);
 
   const handleNewsLike = async (newsItem) => {
-    if (!currentUser) return; //ensures user is logged in
-
-    const newsRef = doc(db, "news", newsItem.id);
-    const userRef = doc(db, "users", currentUser.uid);
+    console.log("handleNewsLike called with: ", newsItem);
+    if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
-      //updates database
-      await updateDoc(newsRef, {
-        likes: arrayUnion(currentUser.uid),
-      });
+      const newsRef = doc(db, "news", newsItem.id);
+      const newsDoc = await getDoc(newsRef);
 
-      await updateDoc(userRef, {
-        likedNews: arrayUnion(newsItem.id),
-      });
+      if (newsDoc.exists()) {
+        console.log("test");
+        const currentLikes = newsDoc.data().likes || [];
+        const userIndex = currentLikes.indexOf(currentUser.uid);
 
-      //updates local state
-      setNews((prevNews) =>
-        prevNews.map((item) =>
-          item.id === newsItem.id
-            ? { ...item, likes: [...(item.likes || []), currentUser.uid] }
-            : item
-        )
-      );
+        let updatedLikes;
+        if (userIndex > -1) {
+          // User already liked, so unlike
+          updatedLikes = currentLikes.filter((uid) => uid !== currentUser.uid);
+        } else {
+          // User hasn't liked, so add like
+          updatedLikes = [...currentLikes, currentUser.uid];
+        }
+
+        // Update Firestore
+        await updateDoc(newsRef, {
+          likes: updatedLikes,
+        });
+
+        console.log("Updated likes in Firestore:", updatedLikes);
+
+        // Update local state
+        setNews((prevNews) => {
+          const newNews = prevNews.map((item) =>
+            item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+          );
+          console.log("Updated news state:", newNews);
+          return newNews;
+        });
+
+        // Fetch related news
+        const relatedNewsQuery = query(
+          collection(db, "news"),
+          where("league", "==", newsItem.league),
+          limit(5)
+        );
+        const relatedSnapshot = await getDocs(relatedNewsQuery);
+        const relatedNews = relatedSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        console.log("Related news fetched:", relatedNews);
+
+        // Update allContent
+        setAllContent((prevContent) => {
+          const updatedContent = prevContent.map((item) =>
+            item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+          );
+          relatedNews.forEach((relatedItem) => {
+            if (!updatedContent.some((item) => item.id === relatedItem.id)) {
+              updatedContent.push(relatedItem);
+            }
+          });
+          const sortedContent = updatedContent.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
+            const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
+            return dateB - dateA;
+          });
+          console.log("Updated allContent:", sortedContent);
+          return sortedContent;
+        });
+      }
     } catch (error) {
-      console.error("Error updating like: ", error);
+      console.error("Error in handleNewsLike: ", error);
     }
   };
 
   const handleNewsComment = async (newsItem, commentText) => {
-    if (!currentUser) return; //same as before, ensures users logged in
-
-    const newsRef = doc(db, "news", newsItem.id);
-    const userRef = doc(db, "users", currentUser.uid);
-
-    const newComment = {
-      user: currentUser.uid,
-      content: commentText,
-      timestamp: serverTimestamp(),
-    };
+    if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
-      //updates database
+      const newsRef = doc(db, "news", newsItem.id);
+      const newComment = {
+        user: currentUser.uid,
+        content: commentText,
+        timestamp: serverTimestamp(),
+      };
+
       await updateDoc(newsRef, {
         comments: arrayUnion(newComment),
       });
 
-      await updateDoc(userRef, {
-        commentedNews: arrayUnion(newsItem.id),
-      });
-
-      //update localstate
+      //update local state
       setNews((prevNews) =>
         prevNews.map((item) =>
           item.id === newsItem.id
@@ -444,7 +502,7 @@ const Feed = () => {
         )
       );
     } catch (error) {
-      console.error("Error adding comment: ", error);
+      console.error("Error in handleNewsComment: ", error);
     }
   };
 
@@ -529,7 +587,10 @@ const Feed = () => {
     fetchPosts(); // re-fetch posts to show new comment
   };
 
-  const PostCard = ({ newsItem }) => {
+  const PostCard = ({ newsItem, onLike, onComment }) => {
+    const [showComments, setShowComments] = useState(false);
+    const [newComment, setNewComment] = useState("");
+
     return (
       <div style={styles.postCard}>
         <h3 style={styles.postTitle}>{newsItem.title}</h3>
@@ -543,6 +604,47 @@ const Feed = () => {
         >
           Read more
         </a>
+        <div style={styles.postActions}>
+          <button onClick={() => onLike(newsItem)} style={styles.actionButton}>
+            {newsItem.likes ? newsItem.likes.length : 0} Likes
+          </button>
+          <button
+            onClick={() => setShowComments(!showComments)}
+            style={styles.actionButton}
+          >
+            {newsItem.comments ? newsItem.comments.length : 0} Comments
+          </button>
+        </div>
+        {showComments && (
+          <div>
+            {newsItem.comments && newsItem.comments.length > 0 ? (
+              newsItem.comments.map((comment, index) => (
+                <div key={index} style={styles.comment}>
+                  <strong>{comment.user}: </strong>
+                  {comment.content}
+                </div>
+              ))
+            ) : (
+              <p>No comments yet.</p>
+            )}
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              style={styles.commentInput}
+            />
+            <button
+              onClick={() => {
+                onComment(newsItem, newComment);
+                setNewComment("");
+              }}
+              style={styles.postButton}
+            >
+              Comment
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -573,14 +675,32 @@ const Feed = () => {
   };
 
   const saveNewsItem = async (newsData) => {
-    await addDoc(collection(db, "news"), {
-      title: newsData.title,
-      content: newsData.content,
-      league: newsData.league,
-      date: serverTimestamp(),
-      likes: [],
-      comments: [],
-    });
+    // await addDoc(collection(db, "news"), {
+    //   title: newsData.title,
+    //   content: newsData.content,
+    //   league: newsData.league,
+    //   date: serverTimestamp(),
+    //   likes: [],
+    //   comments: [],
+    // });
+
+    try {
+      const docRef = await addDoc(collection(db, "news"), {
+        title: newsData.title,
+        content: newsData.content,
+        league: newsData.league,
+        date: serverTimestamp(),
+        likes: [],
+        comments: [],
+      });
+
+      await updateDoc(docRef, {
+        id: docRef.id,
+      });
+      console.log("Document written with ID: ", docRef.id);
+    } catch (error) {
+      console.error("error adding document: ", error);
+    }
   };
 
   const createUserDocument = async (user) => {
@@ -603,7 +723,7 @@ const Feed = () => {
               // This is a news item
               return (
                 <PostCard
-                  key={`news-${index}`}
+                  key={`news-${item.id}`}
                   newsItem={item}
                   onLike={handleNewsLike}
                   onComment={handleNewsComment}
@@ -614,18 +734,9 @@ const Feed = () => {
               // This is a post
               return (
                 <div key={`post-${item.id}`} style={styles.post}>
-                  <img
-                    src={
-                      item.author.profileImg || `https://via.placeholder.com/40`
-                    }
-                    alt={item.author.fullName}
-                    style={styles.avatar}
-                  />
                   <div style={styles.postContent}>
                     <div style={styles.postHeader}>
-                      <span style={styles.userName}>
-                        {item.author.fullName}
-                      </span>
+                      <span style={styles.userName}></span>
                       <span style={styles.postTime}>
                         {item.timestamp && item.timestamp.toDate
                           ? item.timestamp.toDate().toLocaleString()
