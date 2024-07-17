@@ -5,6 +5,8 @@ export const fetchNewsInfo = async (setNewsData, newsSource) => {
     const response = await axios.get(
       `http://localhost:3002/news/source/${newsSource}`
     );
+
+    setNewsData(response.data);
     console.log(response.data);
     return response.data;
   } catch (error) {
@@ -72,3 +74,4 @@ export const fetchUCLNews = async (setNewsData) => {
     throw error;
   }
 };
+

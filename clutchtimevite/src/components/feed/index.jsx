@@ -214,6 +214,7 @@ const Feed = () => {
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
 
+
   const { ref, inView } = useInView({
     threshold: 0,
   });
@@ -228,8 +229,6 @@ const Feed = () => {
       const postsRef = collection(db, "posts");
 
       try {
-        // const userDoc = await getDocs(doc(db, "users", currentUser.uid));
-        // const userData = userDoc.data();
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
@@ -256,12 +255,10 @@ const Feed = () => {
         }
 
         const querySnapshot = await getDocs(q);
-        console.log("Query snapshot size: ", querySnapshot.size); //logging query snapshot size
 
         const fetchedPosts = await Promise.all(
           querySnapshot.docs.map(async (postDoc) => {
             const postData = postDoc.data();
-            console.log("Post data: ", postData); //logging to see if post data is being read
 
             const authorDocRef = doc(db, "users", postData.authorId);
             const authorDocSnap = await getDoc(authorDocRef);
@@ -306,7 +303,6 @@ const Feed = () => {
       fetchPosts(lastVisible);
     }
   }, [inView, fetchPosts, lastVisible, loading, hasMore]);
-
   useEffect(() => {
     const fetchUserLeaguesAndNews = async () => {
       if (currentUser) {
@@ -691,6 +687,7 @@ const Feed = () => {
               );
             }
           })}
+
           {loading && (
             <div style={styles.loadingMore}>Loading More Posts...</div>
           )}
