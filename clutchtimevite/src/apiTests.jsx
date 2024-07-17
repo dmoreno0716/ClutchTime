@@ -63,7 +63,6 @@ function Test() {
 
       //NEWS INFO
 
-      // fetchNewsInfo(setNewsData, "espn");
       fetchBundesligaNews(setNewsData);
     }
   }, [isLoading]);

@@ -219,6 +219,7 @@ const Feed = () => {
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
 
+
   const { ref, inView } = useInView({
     threshold: 0,
   });
@@ -298,7 +299,6 @@ const Feed = () => {
       fetchPosts(lastVisible);
     }
   }, [inView, fetchPosts, lastVisible, loading, hasMore]);
-
   useEffect(() => {
     const fetchUserLeaguesAndNews = async () => {
       if (currentUser) {
@@ -820,6 +820,7 @@ const Feed = () => {
               );
             }
           })}
+
           {loading && (
             <div style={styles.loadingMore}>Loading More Posts...</div>
           )}
