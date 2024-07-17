@@ -219,7 +219,6 @@ const Feed = () => {
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
 
-
   const { ref, inView } = useInView({
     threshold: 0,
   });
@@ -460,29 +459,58 @@ const Feed = () => {
 
   const handleNewsComment = async (newsItem, commentText) => {
     if (!currentUser || !newsItem || !newsItem.id) return;
-
     try {
       const newsRef = doc(db, "news", newsItem.id);
+
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      const userFullName = userDoc.exists()
+        ? userDoc.data().fullName
+        : "Unknown User";
+
+      // create a new comment without serverTimestamp
       const newComment = {
         user: currentUser.uid,
+        userFullName: userFullName,
         content: commentText,
-        timestamp: serverTimestamp(),
+        timestamp: new Date().toISOString(),
       };
 
-      await updateDoc(newsRef, {
-        comments: arrayUnion(newComment),
-      });
+      // first get the current document
+      const newsDoc = await getDoc(newsRef);
 
-      //update local state
+      if (!newsDoc.exists()) {
+        // if the document doesn't exist, create it
+        await setDoc(newsRef, {
+          ...newsItem,
+          comments: [newComment],
+        });
+      } else {
+        // if it exists, update it
+        await updateDoc(newsRef, {
+          comments: arrayUnion(newComment),
+        });
+      }
+
+      // Update local state
       setNews((prevNews) =>
         prevNews.map((item) =>
           item.id === newsItem.id
             ? {
                 ...item,
-                comments: [
-                  ...Feed(item.comments || []),
-                  { ...newComment, timestamp: new Date() },
-                ],
+                comments: [...(item.comments || []), newComment],
+              }
+            : item
+        )
+      );
+
+      // update allContent state
+      setAllContent((prevContent) =>
+        prevContent.map((item) =>
+          item.id === newsItem.id
+            ? {
+                ...item,
+                comments: [...(item.comments || []), newComment],
               }
             : item
         )
@@ -622,7 +650,7 @@ const Feed = () => {
             {newsItem.comments && newsItem.comments.length > 0 ? (
               newsItem.comments.map((comment, index) => (
                 <div key={index} style={styles.comment}>
-                  <strong>{comment.user}: </strong>
+                  <strong>{comment.userFullName}: </strong>
                   {comment.content}
                 </div>
               ))
@@ -677,15 +705,6 @@ const Feed = () => {
   };
 
   const saveNewsItem = async (newsData) => {
-    // await addDoc(collection(db, "news"), {
-    //   title: newsData.title,
-    //   content: newsData.content,
-    //   league: newsData.league,
-    //   date: serverTimestamp(),
-    //   likes: [],
-    //   comments: [],
-    // });
-
     try {
       const docRef = await addDoc(collection(db, "news"), {
         title: newsData.title,
