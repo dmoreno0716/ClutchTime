@@ -11,7 +11,13 @@ import {
   fetchUpcomingLeagueInfo,
 } from "./services/api/getMatchDetails";
 import { auth } from "./firebase/firebase";
-import { fetchNewsInfo } from "./services/api/getNewsInfo";
+import {
+  fetchNewsInfo,
+  fetchBundesligaNews,
+  fetchEPLNews,
+  fetchLaLigaNews,
+  fetchUCLNews,
+} from "./services/api/getNewsInfo";
 
 function Test() {
   const [userData, setUserData] = useState({
@@ -57,7 +63,7 @@ function Test() {
 
       //NEWS INFO
 
-      fetchNewsInfo(setNewsData, "espn");
+      fetchBundesligaNews(setNewsData);
     }
   }, [isLoading]);
 
