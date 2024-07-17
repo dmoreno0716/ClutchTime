@@ -174,8 +174,6 @@ const Feed = () => {
       const postsRef = collection(db, "posts");
 
       try {
-        // const userDoc = await getDocs(doc(db, "users", currentUser.uid));
-        // const userData = userDoc.data();
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
@@ -185,10 +183,8 @@ const Feed = () => {
           return;
         }
         const userData = userDocSnap.data();
-        console.log("User data: ", userData); //logging user data to test
 
         const following = userData.followingUsers || [];
-        console.log("Following users: ", following); //logging to see if data is being picked up
 
         let q = query(
           postsRef,
@@ -202,12 +198,10 @@ const Feed = () => {
         }
 
         const querySnapshot = await getDocs(q);
-        console.log("Query snapshot size: ", querySnapshot.size); //logging query snapshot size
 
         const fetchedPosts = await Promise.all(
           querySnapshot.docs.map(async (postDoc) => {
             const postData = postDoc.data();
-            console.log("Post data: ", postData); //logging to see if post data is being read
 
             const authorDocRef = doc(db, "users", postData.authorId);
             const authorDocSnap = await getDoc(authorDocRef);
