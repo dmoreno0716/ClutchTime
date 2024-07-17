@@ -29,6 +29,8 @@ import {
   fetchUCLNews,
 } from "../../services/api/getNewsInfo";
 import PostCard from "../PostCard";
+import PredictionForm from "../PredictionForm";
+import PredictionPost from "../PredictionPost";
 
 const styles = {
   app: {
@@ -225,27 +227,19 @@ const Feed = () => {
     async (lastDoc = null) => {
       if (!currentUser || loading || !hasMore) return;
 
-      console.log("Fetching posts for user: ", currentUser.uid); //logging current user object
-
       setLoading(true);
       const postsRef = collection(db, "posts");
 
       try {
-        // const userDoc = await getDocs(doc(db, "users", currentUser.uid));
-        // const userData = userDoc.data();
         const userDocRef = doc(db, "users", currentUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          console.error("User document does not exist");
           setLoading(false);
           return;
         }
         const userData = userDocSnap.data();
-        console.log("User data: ", userData); //logging user data to test
-
         const following = userData.followingUsers || [];
-        console.log("Following users: ", following); //logging to see if data is being picked up
 
         let q = query(
           postsRef,
@@ -259,13 +253,10 @@ const Feed = () => {
         }
 
         const querySnapshot = await getDocs(q);
-        console.log("Query snapshot size: ", querySnapshot.size); //logging query snapshot size
 
         const fetchedPosts = await Promise.all(
           querySnapshot.docs.map(async (postDoc) => {
             const postData = postDoc.data();
-            console.log("Post data: ", postData); //logging to see if post data is being read
-
             const authorDocRef = doc(db, "users", postData.authorId);
             const authorDocSnap = await getDoc(authorDocRef);
             const authorData = authorDocSnap.exists()
@@ -283,8 +274,6 @@ const Feed = () => {
             };
           })
         );
-
-        console.log("Fetched posts: ", fetchedPosts); //logging to see if posts got fetched
 
         setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
         setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
@@ -371,7 +360,6 @@ const Feed = () => {
             return firestoreItem ? { ...news, ...firestoreItem } : news;
           });
 
-          console.log("fetched news: ", allNews);
           //sorts news by date if needed
           allNews.sort((a, b) => new Date(b.date) - new Date(a.date));
           setNews(allNews.slice(0, 6)); //limiting first render for first 6 articles
@@ -392,81 +380,79 @@ const Feed = () => {
       const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
       return dateB - dateA;
     });
-    console.log("sorted content: ", sortedContent);
     setAllContent(sortedContent);
   }, [news, posts]);
 
   const handleNewsLike = async (newsItem) => {
-    console.log("handleNewsLike called with: ", newsItem);
     if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
       const newsRef = doc(db, "news", newsItem.id);
       const newsDoc = await getDoc(newsRef);
 
-      if (newsDoc.exists()) {
-        console.log("test");
-        const currentLikes = newsDoc.data().likes || [];
-        const userIndex = currentLikes.indexOf(currentUser.uid);
-
-        let updatedLikes;
-        if (userIndex > -1) {
-          // User already liked, so unlike
-          updatedLikes = currentLikes.filter((uid) => uid !== currentUser.uid);
-        } else {
-          // User hasn't liked, so add like
-          updatedLikes = [...currentLikes, currentUser.uid];
-        }
-
-        // Update Firestore
-        await updateDoc(newsRef, {
-          likes: updatedLikes,
+      let currentLikes = [];
+      if (!newsDoc.exists()) {
+        // if the document doesn't exist, create it
+        await setDoc(newsRef, {
+          ...newsItem,
+          likes: [currentUser.uid],
         });
-
-        console.log("Updated likes in Firestore:", updatedLikes);
-
-        // Update local state
-        setNews((prevNews) => {
-          const newNews = prevNews.map((item) =>
-            item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
-          );
-          console.log("Updated news state:", newNews);
-          return newNews;
-        });
-
-        // Fetch related news
-        const relatedNewsQuery = query(
-          collection(db, "news"),
-          where("league", "==", newsItem.league),
-          limit(5)
-        );
-        const relatedSnapshot = await getDocs(relatedNewsQuery);
-        const relatedNews = relatedSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-
-        console.log("Related news fetched:", relatedNews);
-
-        // Update allContent
-        setAllContent((prevContent) => {
-          const updatedContent = prevContent.map((item) =>
-            item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
-          );
-          relatedNews.forEach((relatedItem) => {
-            if (!updatedContent.some((item) => item.id === relatedItem.id)) {
-              updatedContent.push(relatedItem);
-            }
-          });
-          const sortedContent = updatedContent.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
-            const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
-            return dateB - dateA;
-          });
-          console.log("Updated allContent:", sortedContent);
-          return sortedContent;
-        });
+        currentLikes = [currentUser.uid];
+      } else {
+        currentLikes = newsDoc.data().likes || [];
       }
+
+      const userIndex = currentLikes.indexOf(currentUser.uid);
+      let updatedLikes;
+      if (userIndex > -1) {
+        // user already liked, so unlike
+        updatedLikes = currentLikes.filter((uid) => uid !== currentUser.uid);
+      } else {
+        // user hasn't liked, so add like
+        updatedLikes = [...currentLikes, currentUser.uid];
+      }
+
+      // update Firestore
+      await updateDoc(newsRef, {
+        likes: updatedLikes,
+      });
+      // update local state
+      setNews((prevNews) => {
+        const newNews = prevNews.map((item) =>
+          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+        );
+        return newNews;
+      });
+
+      // fetch related news
+      const relatedNewsQuery = query(
+        collection(db, "news"),
+        where("league", "==", newsItem.league),
+        limit(5)
+      );
+      const relatedSnapshot = await getDocs(relatedNewsQuery);
+      const relatedNews = relatedSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Update allContent
+      setAllContent((prevContent) => {
+        const updatedContent = prevContent.map((item) =>
+          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+        );
+        relatedNews.forEach((relatedItem) => {
+          if (!updatedContent.some((item) => item.id === relatedItem.id)) {
+            updatedContent.push(relatedItem);
+          }
+        });
+        const sortedContent = updatedContent.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
+          const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
+          return dateB - dateA;
+        });
+        return sortedContent;
+      });
     } catch (error) {
       console.error("Error in handleNewsLike: ", error);
     }
@@ -555,13 +541,20 @@ const Feed = () => {
     await updateDoc(postRef, {
       likes: arrayUnion(currentUser.uid),
     });
-    // fetch related posts based on the liked post
-    const likedPost = posts.find((post) => post.id === postId);
+
+    setAllContent((prevContent) =>
+      prevContent.map((item) =>
+        item.id === postId
+          ? { ...item, likes: [...Feed(item.likes || []), currentUser.uid] }
+          : item
+      )
+    );
+
+    const likedPost = allContent.find((post) => post.id === postId);
     if (likedPost) {
       const relatedPostsQuery = query(
         collection(db, "posts"),
-        where("type", "==", likedPost.type),
-        where("relevantTo", "array-contains-any", likedPost.relevantTo),
+        where("gameId", "==", likedPost.gameId),
         limit(5)
       );
       const relatedSnapshot = await getDocs(relatedPostsQuery);
@@ -569,22 +562,31 @@ const Feed = () => {
         id: doc.id,
         ...doc.data(),
       }));
-      setPosts((prevPosts) => [...prevPosts, ...relatedPosts]);
+      setAllContent((prevContent) => [...prevContent, ...relatedPosts]);
     }
   };
 
-  const handleComment = async (postId) => {
-    if (comment.trim() === "") return;
+  const handleComment = async (postId, commentText) => {
+    if (commentText.trim() === "") return;
+
     const postRef = doc(db, "posts", postId);
+    const newComment = {
+      user: currentUser.uid,
+      content: commentText,
+      timestamp: serverTimestamp(),
+    };
+
     await updateDoc(postRef, {
-      comments: arrayUnion({
-        user: currentUser.fullName,
-        content: comment,
-        timestamp: new Date(),
-      }),
+      comments: arrayUnion(newComment),
     });
-    setComment("");
-    fetchPosts(); // re-fetch posts to show new comment
+
+    setAllContent((prevContent) =>
+      prevContent.map((item) =>
+        item.id === postId
+          ? { ...item, comments: [...Feed(item.comments || []), newComment] }
+          : item
+      )
+    );
   };
 
   const PostCard = ({ newsItem, onLike, onComment }) => {
@@ -697,7 +699,6 @@ const Feed = () => {
       await updateDoc(docRef, {
         id: docRef.id,
       });
-      console.log("Document written with ID: ", docRef.id);
     } catch (error) {
       console.error("error adding document: ", error);
     }
@@ -713,27 +714,44 @@ const Feed = () => {
     });
   };
 
+  const handlePredictionPost = (newPrediction) => {
+    setAllContent((prevContent) => [newPrediction, ...prevContent]);
+  };
+
   return (
     <div style={styles.app}>
       <Sidebar />
       <div style={styles.mainContent}>
         <div style={styles.feed}>
+          <PredictionForm
+            onPredictionPost={handlePredictionPost}
+          ></PredictionForm>
           {allContent.map((item, index) => {
             if (item.league) {
               // This is a news item
               return (
                 <PostCard
-                  key={`news-${item.id}`}
+                  key={`news-${item.id}-${index}`}
                   newsItem={item}
                   onLike={handleNewsLike}
                   onComment={handleNewsComment}
                   styles={styles}
                 />
               );
+            } else if (item.predictedHomeScore !== undefined) {
+              return (
+                <PredictionPost
+                  key={`prediction-${item.id}-${index}`}
+                  prediction={item}
+                  onLike={handleLike}
+                  onComment={handleComment}
+                  styles={styles}
+                ></PredictionPost>
+              );
             } else {
               // This is a post
               return (
-                <div key={`post-${item.id}`} style={styles.post}>
+                <div key={`post-${item.id}-${index}`} style={styles.post}>
                   <div style={styles.postContent}>
                     <div style={styles.postHeader}>
                       <span style={styles.userName}></span>
