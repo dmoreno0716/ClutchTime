@@ -15,7 +15,9 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-intersection-observer": "^9.13.0",
-    "react-router-dom": "^6.24.0"
+    "react-router-dom": "^6.24.0",
+    "stopwords": "^0.0.9",
+    "stopwords-en": "^0.3.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.3",
