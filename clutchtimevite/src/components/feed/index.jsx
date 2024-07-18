@@ -31,6 +31,7 @@ import {
 import PostCard from "../PostCard";
 import PredictionForm from "../PredictionForm";
 import PredictionPost from "../PredictionPost";
+import stopwords from "stopwords-en";
 
 const styles = {
   app: {
@@ -207,6 +208,7 @@ const styles = {
 };
 
 const Feed = () => {
+  const [feedArticles, setFeedArticles] = useState([]);
   const { currentUser } = useAuth();
   const [posts, setPosts] = useState([]);
   const [comment, setComment] = useState("");
@@ -383,11 +385,21 @@ const Feed = () => {
   }, [news, posts]);
 
   const handleNewsLike = async (newsItem) => {
+    const keywords = extractKeywords(
+      newsItem.title + " " + newsItem.description
+    );
+
     if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
+      const userRef = doc(db, "users", currentUser.uid);
       const newsRef = doc(db, "news", newsItem.id);
       const newsDoc = await getDoc(newsRef);
+
+      //stores keywords
+      await updateDoc(userRef, {
+        preferredKeywords: arrayUnion(...keywords),
+      });
 
       let currentLikes = [];
       if (!newsDoc.exists()) {
@@ -735,6 +747,96 @@ const Feed = () => {
 
   const handlePredictionPost = (newPrediction) => {
     setAllContent((prevContent) => [newPrediction, ...prevContent]);
+  };
+
+  const extractKeywords = (text) => {
+    //const words = text.toLowerCase().match(/\b(/w+)\b/g) || [];
+    return words.filter((word) => !stopwords.includes(word));
+  };
+
+  const calulateScore = (userKeywords, articleKeywords) => {
+    const sharedKeywords = userKeywords.filter((keyword) =>
+      articleKeywords.includes(keyword)
+    );
+    return sharedKeywords.length;
+  };
+
+  const getRecommendations = async (
+    userId,
+    articles,
+    numRecommendations = 5
+  ) => {
+    //fetches user profile from firebase
+    const userRef = doc(db, "users", userId);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      return [];
+    }
+
+    const userKeywords = userDoc.data().preferredKeywords || [];
+
+    const scores = articles.map((article) => ({
+      ...article,
+      score: calulateScore(
+        userKeywords,
+        extractKeywords(article.title + " " + article.description)
+      ),
+    }));
+
+    return scores
+      .sort((a, b) => b.score - a.score)
+      .slice(0, numRecommendations);
+  };
+
+  const fetchAllArticles = async () => {
+    try {
+      const articlesRef = collection(db, "news");
+      const snapshot = await getDocs(articlesRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error("Error fetching articles: ", error);
+      return [];
+    }
+  };
+
+  const recommendedArticles = ({ userId }) => {
+    const [recommendations, setRecommendations] = useState([]);
+
+    useEffect(() => {
+      const fetchRecommendations = async () => {
+        const allArticles = await fetchAllArticles();
+        const recommendedArticles = await getRecommendations(
+          userId,
+          allArticles
+        );
+        setRecommendations(recommendedArticles);
+      };
+      fetchRecommendations();
+    }, [userId]);
+
+    return (
+      <div>
+        {recommendations.map((article) => (
+          <ArticleComponent
+            key={article.id}
+            article={article}
+          ></ArticleComponent>
+        ))}
+      </div>
+    );
+  };
+
+  const fetchFeedArticles = async () => {
+    const allArticles = await fetchAllArticles();
+    const recommendedArticles = await getRecommendations(
+      currentUser.uid,
+      allArticles
+    );
+    setFeedArticles(recommendedArticles);
   };
 
   return (
