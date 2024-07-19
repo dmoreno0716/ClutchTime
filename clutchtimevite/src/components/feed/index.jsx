@@ -532,34 +532,28 @@ const Feed = () => {
     }
   };
 
-  const calculateWeight = (newsItem) => {
-    const likeWeight = newsItem.likes.includes(currentUser.uid) ? 1 : 0;
-    const commentWeight =
-      newsItem.comments.filter((comment) => comment.user === currentUser.uid)
-        .length * 5;
-    return likeWeight + commentWeight;
-  };
-
   const fetchRecommendedNews = async () => {
-    //fetch from backend
-    const newsRef = collection(db, "news");
-    const newsSnapshot = await getDocs(newsRef);
-    const allNews = newsSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
+    const allNewsPosts = await fetchAllNewsPosts();
+
+    const userRef = doc(db, "users", currentUser.uid);
+    const userDoc = await getDoc(userRef);
+    const userKeywords = userDoc.exists()
+      ? userDoc.data().preferredKeywords || []
+      : [];
+
+    const rankedNews = allNewsPosts.map((newsPost) => ({
+      ...newsPost,
+      score: calculateRanking(newsPost, userKeywords, currentUser.uid),
     }));
-    const weightedNews = allNews.map((item) => ({
-      ...item,
-      weight: calculateWeight(item),
-    }));
-    weightedNews.sort((a, b) => b.weight - a.weight);
-    return weightedNews.slice(0, 3); // returns top 3 recommended articles
+
+    rankedNews.sort((a, b) => b.score - a.score);
+    return rankedNews.slice(0, 3); // returns top 3 recommended news posts
   };
 
   useEffect(() => {
     const combineContent = async () => {
       let recommendedNews = [];
-      if (news.some((item) => calculateWeight(item) > 0)) {
+      if (news.length > 0) {
         recommendedNews = await fetchRecommendedNews();
       }
       const sortedContent = [...news, ...recommendedNews, ...posts].sort(
@@ -750,20 +744,35 @@ const Feed = () => {
   };
 
   const extractKeywords = (text) => {
-    //const words = text.toLowerCase().match(/\b(/w+)\b/g) || [];
-    return words.filter((word) => !stopwords.includes(word));
+    const words = text.toLowerCase().split(/\W+/); //converts text to lowercas and splits into words
+
+    return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
   };
 
-  const calulateScore = (userKeywords, articleKeywords) => {
-    const sharedKeywords = userKeywords.filter((keyword) =>
-      articleKeywords.includes(keyword)
+  const calculateRanking = (article, userKeywords, currentUserId) => {
+    //calculates keyword score
+    const articleKeywords = extractKeywords(
+      article.title + " " + article.description
     );
-    return sharedKeywords.length;
+    const keywordScore = articleKeywords.filter((keyword) =>
+      userKeywords.includes(keyword)
+    ).length;
+
+    //calculates user action score
+    const likeWeight = article.likes.includes(currentUserId) ? 1 : 0;
+    const commentWeight =
+      article.comments.filter((comment) => comment.user === currentUserId)
+        .length * 5;
+    const actionScore = likeWeight + commentWeight;
+
+    //combine scores
+    const totalScore = keywordScore * 2 + actionScore;
+    return totalScore;
   };
 
   const getRecommendations = async (
     userId,
-    articles,
+    newsPosts,
     numRecommendations = 5
   ) => {
     //fetches user profile from firebase
@@ -776,12 +785,9 @@ const Feed = () => {
 
     const userKeywords = userDoc.data().preferredKeywords || [];
 
-    const scores = articles.map((article) => ({
-      ...article,
-      score: calulateScore(
-        userKeywords,
-        extractKeywords(article.title + " " + article.description)
-      ),
+    const scores = newsPosts.map((newsPost) => ({
+      ...newsPost,
+      score: calculateRanking(newsPost, userKeywords, userId),
     }));
 
     return scores
@@ -789,54 +795,56 @@ const Feed = () => {
       .slice(0, numRecommendations);
   };
 
-  const fetchAllArticles = async () => {
+  const fetchAllNewsPosts = async () => {
     try {
-      const articlesRef = collection(db, "news");
-      const snapshot = await getDocs(articlesRef);
+      const newsRef = collection(db, "news");
+      const snapshot = await getDocs(newsRef);
       return snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
     } catch (error) {
-      console.error("Error fetching articles: ", error);
+      "Error fetching news posts: ", error;
       return [];
     }
   };
 
-  const recommendedArticles = ({ userId }) => {
+  const RecommendedNewsPosts = ({ userId }) => {
     const [recommendations, setRecommendations] = useState([]);
 
     useEffect(() => {
       const fetchRecommendations = async () => {
-        const allArticles = await fetchAllArticles();
-        const recommendedArticles = await getRecommendations(
+        const allNewsPosts = await fetchAllNewsPosts();
+        const recommendedNewsPosts = await getRecommendations(
           userId,
-          allArticles
+          allNewsPosts
         );
-        setRecommendations(recommendedArticles);
+        setRecommendations(recommendedNewsPosts);
       };
       fetchRecommendations();
     }, [userId]);
 
     return (
       <div>
-        {recommendations.map((article) => (
-          <ArticleComponent
-            key={article.id}
-            article={article}
-          ></ArticleComponent>
+        {recommendations.map((newsPost) => (
+          <PostCard
+            key={newsPost.id}
+            newsItem={newsPost}
+            onLike={handleNewsLike}
+            onComment={handleNewsComment}
+          />
         ))}
       </div>
     );
   };
 
-  const fetchFeedArticles = async () => {
-    const allArticles = await fetchAllArticles();
-    const recommendedArticles = await getRecommendations(
+  const fetchFeedNewsPosts = async () => {
+    const allNewsPosts = await fetchAllNewsPosts();
+    const recommendedNewsPosts = await getRecommendations(
       currentUser.uid,
-      allArticles
+      allNewsPosts
     );
-    setFeedArticles(recommendedArticles);
+    setNews(recommendedNewsPosts);
   };
 
   return (
