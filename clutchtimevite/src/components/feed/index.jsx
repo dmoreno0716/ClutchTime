@@ -14,6 +14,7 @@ import {
   doc,
   getDoc,
   arrayUnion,
+  arrayRemove,
   startAfter,
   addDoc,
   serverTimestamp,
@@ -28,6 +29,8 @@ import {
   fetchUCLNews,
 } from "../../services/api/getNewsInfo";
 import PostCard from "../PostCard";
+import PredictionForm from "../PredictionForm";
+import PredictionPost from "../PredictionPost";
 
 const styles = {
   app: {
@@ -207,13 +210,14 @@ const Feed = () => {
   const { currentUser } = useAuth();
   const [posts, setPosts] = useState([]);
   const [comment, setComment] = useState("");
+  const [newComment, setNewComment] = useState("");
+  const [showComments, setShowComments] = useState(false);
   const [lastVisible, setLastVisible] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [followedLeagues, setFollowedLeagues] = useState([]);
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
-
 
   const { ref, inView } = useInView({
     threshold: 0,
@@ -223,8 +227,6 @@ const Feed = () => {
     async (lastDoc = null) => {
       if (!currentUser || loading || !hasMore) return;
 
-      console.log("Fetching posts for user: ", currentUser.uid); //logging current user object
-
       setLoading(true);
       const postsRef = collection(db, "posts");
 
@@ -233,15 +235,11 @@ const Feed = () => {
         const userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          console.error("User document does not exist");
           setLoading(false);
           return;
         }
         const userData = userDocSnap.data();
-        console.log("User data: ", userData); //logging user data to test
-
         const following = userData.followingUsers || [];
-        console.log("Following users: ", following); //logging to see if data is being picked up
 
         let q = query(
           postsRef,
@@ -259,7 +257,6 @@ const Feed = () => {
         const fetchedPosts = await Promise.all(
           querySnapshot.docs.map(async (postDoc) => {
             const postData = postDoc.data();
-
             const authorDocRef = doc(db, "users", postData.authorId);
             const authorDocSnap = await getDoc(authorDocRef);
             const authorData = authorDocSnap.exists()
@@ -277,8 +274,6 @@ const Feed = () => {
             };
           })
         );
-
-        console.log("Fetched posts: ", fetchedPosts); //logging to see if posts got fetched
 
         setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
         setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
@@ -308,7 +303,6 @@ const Feed = () => {
       if (currentUser) {
         let allNews = [];
         try {
-          //fetches users followed leagues
           const userRef = doc(db, "users", currentUser.uid);
           const userSnap = await getDoc(userRef);
           if (userSnap.exists()) {
@@ -316,6 +310,7 @@ const Feed = () => {
             setFollowedLeagues(userData.followedLeagues || []);
 
             //fetches news for followed leagues
+            let newsId = 1;
 
             for (const league of userData.followedLeagues) {
               let leagueNews;
@@ -342,6 +337,7 @@ const Feed = () => {
                   ...leagueNews.map((news) => ({
                     ...news,
                     league,
+                    id: `news_${newsId++}`, //assigns unique ID to each news item
                     likes: news.likes || [],
                     comments: news.comments || [],
                   })),
@@ -349,7 +345,20 @@ const Feed = () => {
               }
             }
           }
-          console.log("fetched news: ", allNews);
+          const newsRef = collection(db, "news");
+          const newsSnapshot = await getDocs(newsRef);
+          const firestoreNews = newsSnapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          //merge fetched news with firestore data
+          allNews = allNews.map((news) => {
+            const firestoreItem = firestoreNews.find(
+              (item) => item.id === news.id
+            );
+            return firestoreItem ? { ...news, ...firestoreItem } : news;
+          });
+
           //sorts news by date if needed
           allNews.sort((a, b) => new Date(b.date) - new Date(a.date));
           setNews(allNews.slice(0, 6)); //limiting first render for first 6 articles
@@ -370,77 +379,144 @@ const Feed = () => {
       const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
       return dateB - dateA;
     });
-    console.log("sorted content: ", sortedContent);
     setAllContent(sortedContent);
   }, [news, posts]);
 
   const handleNewsLike = async (newsItem) => {
-    if (!currentUser) return; //ensures user is logged in
-
-    const newsRef = doc(db, "news", newsItem.id);
-    const userRef = doc(db, "users", currentUser.uid);
+    if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
-      //updates database
+      const newsRef = doc(db, "news", newsItem.id);
+      const newsDoc = await getDoc(newsRef);
+
+      let currentLikes = [];
+      if (!newsDoc.exists()) {
+        // if the document doesn't exist, create it
+        await setDoc(newsRef, {
+          ...newsItem,
+          likes: [currentUser.uid],
+        });
+        currentLikes = [currentUser.uid];
+      } else {
+        currentLikes = newsDoc.data().likes || [];
+      }
+
+      const userIndex = currentLikes.indexOf(currentUser.uid);
+      let updatedLikes;
+      if (userIndex > -1) {
+        // user already liked, so unlike
+        updatedLikes = currentLikes.filter((uid) => uid !== currentUser.uid);
+      } else {
+        // user hasn't liked, so add like
+        updatedLikes = [...currentLikes, currentUser.uid];
+      }
+
+      // update Firestore
       await updateDoc(newsRef, {
-        likes: arrayUnion(currentUser.uid),
+        likes: updatedLikes,
+      });
+      // update local state
+      setNews((prevNews) => {
+        const newNews = prevNews.map((item) =>
+          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+        );
+        return newNews;
       });
 
-      await updateDoc(userRef, {
-        likedNews: arrayUnion(newsItem.id),
-      });
-
-      //updates local state
-      setNews((prevNews) =>
-        prevNews.map((item) =>
-          item.id === newsItem.id
-            ? { ...item, likes: [...(item.likes || []), currentUser.uid] }
-            : item
-        )
+      // fetch related news
+      const relatedNewsQuery = query(
+        collection(db, "news"),
+        where("league", "==", newsItem.league),
+        limit(5)
       );
+      const relatedSnapshot = await getDocs(relatedNewsQuery);
+      const relatedNews = relatedSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // Update allContent
+      setAllContent((prevContent) => {
+        const updatedContent = prevContent.map((item) =>
+          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+        );
+        relatedNews.forEach((relatedItem) => {
+          if (!updatedContent.some((item) => item.id === relatedItem.id)) {
+            updatedContent.push(relatedItem);
+          }
+        });
+        const sortedContent = updatedContent.sort((a, b) => {
+          const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
+          const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
+          return dateB - dateA;
+        });
+        return sortedContent;
+      });
     } catch (error) {
-      console.error("Error updating like: ", error);
+      console.error("Error in handleNewsLike: ", error);
     }
   };
 
   const handleNewsComment = async (newsItem, commentText) => {
-    if (!currentUser) return; //same as before, ensures users logged in
-
-    const newsRef = doc(db, "news", newsItem.id);
-    const userRef = doc(db, "users", currentUser.uid);
-
-    const newComment = {
-      user: currentUser.uid,
-      content: commentText,
-      timestamp: serverTimestamp(),
-    };
-
+    if (!currentUser || !newsItem || !newsItem.id) return;
     try {
-      //updates database
-      await updateDoc(newsRef, {
-        comments: arrayUnion(newComment),
-      });
+      const newsRef = doc(db, "news", newsItem.id);
 
-      await updateDoc(userRef, {
-        commentedNews: arrayUnion(newsItem.id),
-      });
+      const userRef = doc(db, "users", currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      const userFullName = userDoc.exists()
+        ? userDoc.data().fullName
+        : "Unknown User";
 
-      //update localstate
+      // create a new comment without serverTimestamp
+      const newComment = {
+        user: currentUser.uid,
+        userFullName: userFullName,
+        content: commentText,
+        timestamp: new Date().toISOString(),
+      };
+
+      // first get the current document
+      const newsDoc = await getDoc(newsRef);
+
+      if (!newsDoc.exists()) {
+        // if the document doesn't exist, create it
+        await setDoc(newsRef, {
+          ...newsItem,
+          comments: [newComment],
+        });
+      } else {
+        // if it exists, update it
+        await updateDoc(newsRef, {
+          comments: arrayUnion(newComment),
+        });
+      }
+
+      // Update local state
       setNews((prevNews) =>
         prevNews.map((item) =>
           item.id === newsItem.id
             ? {
                 ...item,
-                comments: [
-                  ...Feed(item.comments || []),
-                  { ...newComment, timestamp: new Date() },
-                ],
+                comments: [...(item.comments || []), newComment],
+              }
+            : item
+        )
+      );
+
+      // update allContent state
+      setAllContent((prevContent) =>
+        prevContent.map((item) =>
+          item.id === newsItem.id
+            ? {
+                ...item,
+                comments: [...(item.comments || []), newComment],
               }
             : item
         )
       );
     } catch (error) {
-      console.error("Error adding comment: ", error);
+      console.error("Error in handleNewsComment: ", error);
     }
   };
 
@@ -493,13 +569,20 @@ const Feed = () => {
     await updateDoc(postRef, {
       likes: arrayUnion(currentUser.uid),
     });
-    // fetch related posts based on the liked post
-    const likedPost = posts.find((post) => post.id === postId);
+
+    setAllContent((prevContent) =>
+      prevContent.map((item) =>
+        item.id === postId
+          ? { ...item, likes: [...Feed(item.likes || []), currentUser.uid] }
+          : item
+      )
+    );
+
+    const likedPost = allContent.find((post) => post.id === postId);
     if (likedPost) {
       const relatedPostsQuery = query(
         collection(db, "posts"),
-        where("type", "==", likedPost.type),
-        where("relevantTo", "array-contains-any", likedPost.relevantTo),
+        where("gameId", "==", likedPost.gameId),
         limit(5)
       );
       const relatedSnapshot = await getDocs(relatedPostsQuery);
@@ -507,25 +590,37 @@ const Feed = () => {
         id: doc.id,
         ...doc.data(),
       }));
-      setPosts((prevPosts) => [...prevPosts, ...relatedPosts]);
+      setAllContent((prevContent) => [...prevContent, ...relatedPosts]);
     }
   };
 
-  const handleComment = async (postId) => {
-    if (comment.trim() === "") return;
+  const handleComment = async (postId, commentText) => {
+    if (commentText.trim() === "") return;
+
     const postRef = doc(db, "posts", postId);
+    const newComment = {
+      user: currentUser.uid,
+      content: commentText,
+      timestamp: serverTimestamp(),
+    };
+
     await updateDoc(postRef, {
-      comments: arrayUnion({
-        user: currentUser.fullName,
-        content: comment,
-        timestamp: new Date(),
-      }),
+      comments: arrayUnion(newComment),
     });
-    setComment("");
-    fetchPosts(); // re-fetch posts to show new comment
+
+    setAllContent((prevContent) =>
+      prevContent.map((item) =>
+        item.id === postId
+          ? { ...item, comments: [...Feed(item.comments || []), newComment] }
+          : item
+      )
+    );
   };
 
-  const PostCard = ({ newsItem }) => {
+  const PostCard = ({ newsItem, onLike, onComment }) => {
+    const [showComments, setShowComments] = useState(false);
+    const [newComment, setNewComment] = useState("");
+
     return (
       <div style={styles.postCard}>
         <h3 style={styles.postTitle}>{newsItem.title}</h3>
@@ -539,6 +634,47 @@ const Feed = () => {
         >
           Read more
         </a>
+        <div style={styles.postActions}>
+          <button onClick={() => onLike(newsItem)} style={styles.actionButton}>
+            {newsItem.likes ? newsItem.likes.length : 0} Likes
+          </button>
+          <button
+            onClick={() => setShowComments(!showComments)}
+            style={styles.actionButton}
+          >
+            {newsItem.comments ? newsItem.comments.length : 0} Comments
+          </button>
+        </div>
+        {showComments && (
+          <div>
+            {newsItem.comments && newsItem.comments.length > 0 ? (
+              newsItem.comments.map((comment, index) => (
+                <div key={index} style={styles.comment}>
+                  <strong>{comment.userFullName}: </strong>
+                  {comment.content}
+                </div>
+              ))
+            ) : (
+              <p>No comments yet.</p>
+            )}
+            <input
+              type="text"
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Add a comment..."
+              style={styles.commentInput}
+            />
+            <button
+              onClick={() => {
+                onComment(newsItem, newComment);
+                setNewComment("");
+              }}
+              style={styles.postButton}
+            >
+              Comment
+            </button>
+          </div>
+        )}
       </div>
     );
   };
@@ -569,14 +705,22 @@ const Feed = () => {
   };
 
   const saveNewsItem = async (newsData) => {
-    await addDoc(collection(db, "news"), {
-      title: newsData.title,
-      content: newsData.content,
-      league: newsData.league,
-      date: serverTimestamp(),
-      likes: [],
-      comments: [],
-    });
+    try {
+      const docRef = await addDoc(collection(db, "news"), {
+        title: newsData.title,
+        content: newsData.content,
+        league: newsData.league,
+        date: serverTimestamp(),
+        likes: [],
+        comments: [],
+      });
+
+      await updateDoc(docRef, {
+        id: docRef.id,
+      });
+    } catch (error) {
+      console.error("error adding document: ", error);
+    }
   };
 
   const createUserDocument = async (user) => {
@@ -589,39 +733,47 @@ const Feed = () => {
     });
   };
 
+  const handlePredictionPost = (newPrediction) => {
+    setAllContent((prevContent) => [newPrediction, ...prevContent]);
+  };
+
   return (
     <div style={styles.app}>
       <Sidebar />
       <div style={styles.mainContent}>
         <div style={styles.feed}>
+          <PredictionForm
+            onPredictionPost={handlePredictionPost}
+          ></PredictionForm>
           {allContent.map((item, index) => {
             if (item.league) {
               // This is a news item
               return (
                 <PostCard
-                  key={`news-${index}`}
+                  key={`news-${item.id}-${index}`}
                   newsItem={item}
                   onLike={handleNewsLike}
                   onComment={handleNewsComment}
                   styles={styles}
                 />
               );
+            } else if (item.predictedHomeScore !== undefined) {
+              return (
+                <PredictionPost
+                  key={`prediction-${item.id}-${index}`}
+                  prediction={item}
+                  onLike={handleLike}
+                  onComment={handleComment}
+                  styles={styles}
+                ></PredictionPost>
+              );
             } else {
               // This is a post
               return (
-                <div key={`post-${item.id}`} style={styles.post}>
-                  <img
-                    src={
-                      item.author.profileImg || `https://via.placeholder.com/40`
-                    }
-                    alt={item.author.fullName}
-                    style={styles.avatar}
-                  />
+                <div key={`post-${item.id}-${index}`} style={styles.post}>
                   <div style={styles.postContent}>
                     <div style={styles.postHeader}>
-                      <span style={styles.userName}>
-                        {item.author.fullName}
-                      </span>
+                      <span style={styles.userName}></span>
                       <span style={styles.postTime}>
                         {item.timestamp && item.timestamp.toDate
                           ? item.timestamp.toDate().toLocaleString()
