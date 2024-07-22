@@ -42,24 +42,24 @@ function Test() {
   useEffect(() => {
     if (isLoading) {
       fetchUserData(setUserData, setIsLoading);
-      // fetchAllLeagueInfo(setLeagueData, "bl2", "2024");
-      // fetchUpcomingLeagueInfo(setUpcomingLeagueData, "bl2");
-      // fetchAllFinishedGamesInLeagueInfo(
-      //   setFinishedGamesInleagueData,
-      //   "bl2",
-      //   "2024"
-      // );
+      fetchAllLeagueInfo(setLeagueData, "bl2", "2024");
+      fetchUpcomingLeagueInfo(setUpcomingLeagueData, "bl2");
+      fetchAllFinishedGamesInLeagueInfo(
+        setFinishedGamesInleagueData,
+        "bl2",
+        "2024"
+      );
       fetchScheduledGamesInLeagueInfo(
         setScheduledGamesInleagueData,
         "bl2",
         "2024"
       );
-      // fetchPinnedMatchesInfo(
-      //   setPinnedMatchesData,
-      //   "bl2",
-      //   "2024",
-      //   auth.currentUser.uid
-      // );
+      fetchPinnedMatchesInfo(
+        setPinnedMatchesData,
+        "bl2",
+        "2024",
+        auth.currentUser.uid
+      );
 
       //NEWS INFO
 
