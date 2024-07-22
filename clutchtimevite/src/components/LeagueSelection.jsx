@@ -33,7 +33,7 @@ function LeagueSelection() {
           followedLeagues: selectedLeagues,
           hasSelectedLeagues: true,
         });
-        navigate("/feed"); // redirects to feed after selection
+        navigate("/select-teams"); // redirects to team selection after selection
       } catch (error) {
         console.error("Error updating user's followed leagues:", error);
       }
