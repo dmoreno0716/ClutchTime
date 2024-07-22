@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
+  doc,
+  getDoc,
   collection,
   query,
   where,
@@ -9,51 +11,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import { useAuth } from "../contexts/authContext";
-
-const styles = {
-  predictionFormContainer: {
-    backgroundColor: "#192734",
-    borderRadius: "15px",
-    padding: "20px",
-    marginBottom: "20px",
-    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
-  },
-  predictionFormTitle: {
-    fontSize: "18px",
-    fontWeight: "bold",
-    marginBottom: "15px",
-    color: "#ffffff",
-  },
-  predictionFormSelect: {
-    width: "100%",
-    padding: "10px",
-    marginBottom: "15px",
-    backgroundColor: "#253341",
-    color: "#ffffff",
-    border: "1px solid #38444d",
-    borderRadius: "5px",
-  },
-  predictionFormInput: {
-    width: "45%",
-    padding: "10px",
-    marginBottom: "15px",
-    backgroundColor: "#253341",
-    color: "#ffffff",
-    border: "1px solid #38444d",
-    borderRadius: "5px",
-  },
-  predictionFormButton: {
-    width: "100%",
-    padding: "10px",
-    backgroundColor: "#1DA1F2",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "5px",
-    cursor: "pointer",
-    fontSize: "16px",
-    fontWeight: "bold",
-  },
-};
+import { fetchScheduledGamesInLeagueInfo } from "../services/api/getMatchDetails";
 
 const PredictionForm = ({ onPredictionPost }) => {
   const [upcomingGames, setUpcomingGames] = useState([]);
@@ -62,31 +20,94 @@ const PredictionForm = ({ onPredictionPost }) => {
   const [awayScore, setAwayScore] = useState("");
   const { currentUser } = useAuth();
 
+  const styles = {
+    predictionFormContainer: {
+      backgroundColor: "#192734",
+      borderRadius: "15px",
+      padding: "20px",
+      marginBottom: "20px",
+      boxShadow: "0 2px 4px rgba(0, 0, 0, 0.1)",
+    },
+    predictionFormTitle: {
+      fontSize: "18px",
+      fontWeight: "bold",
+      marginBottom: "15px",
+      color: "#ffffff",
+    },
+    predictionFormSelect: {
+      width: "100%",
+      padding: "10px",
+      marginBottom: "15px",
+      backgroundColor: "#253341",
+      color: "#ffffff",
+      border: "1px solid #38444d",
+      borderRadius: "5px",
+    },
+    predictionFormInput: {
+      width: "45%",
+      padding: "10px",
+      marginBottom: "15px",
+      backgroundColor: "#253341",
+      color: "#ffffff",
+      border: "1px solid #38444d",
+      borderRadius: "5px",
+    },
+    predictionFormButton: {
+      width: "100%",
+      padding: "10px",
+      backgroundColor: "#1DA1F2",
+      color: "#ffffff",
+      border: "none",
+      borderRadius: "5px",
+      cursor: "pointer",
+      fontSize: "16px",
+      fontWeight: "bold",
+    },
+  };
+
   useEffect(() => {
-    const fetchUpcomingGames = async () => {
-      const gamesRef = collection(db, "games");
-      const q = query(gamesRef, where("date", ">", new Date()));
-      const querySnapshot = await getDocs(q);
-      const games = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setUpcomingGames(games);
+    const fetchGames = async () => {
+      try {
+        // Fetch user's followed leagues
+        const userRef = doc(db, "users", currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        const userData = userSnap.data();
+        const followedLeagues = userData.followedLeagues || [];
+
+        let allGames = [];
+        for (const league of followedLeagues) {
+          const games = await fetchScheduledGamesInLeagueInfo(
+            setUpcomingGames,
+            "bl2",
+            "2024"
+          );
+          allGames = [...allGames, ...games];
+        }
+
+        // Sort games by date
+        allGames.sort(
+          (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
+        );
+
+        setUpcomingGames(allGames);
+      } catch (error) {
+        console.error("Error fetching scheduled games:", error);
+      }
     };
 
-    fetchUpcomingGames();
-  }, []);
+    fetchGames();
+  }, [currentUser]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedGame || !homeScore || !awayScore) return;
 
-    const game = upcomingGames.find((game) => game.id === selectedGame);
+    const game = upcomingGames.find((game) => game.matchID === selectedGame);
     const prediction = {
-      authorId: currentUser.uid,
-      gameId: selectedGame,
-      homeTeam: game.homeTeam,
-      awayTeam: game.awayTeam,
+      userId: currentUser.uid,
+      matchID: selectedGame,
+      homeTeam: game.team1.teamName,
+      awayTeam: game.team2.teamName,
       predictedHomeScore: parseInt(homeScore),
       predictedAwayScore: parseInt(awayScore),
       timestamp: serverTimestamp(),
@@ -114,9 +135,9 @@ const PredictionForm = ({ onPredictionPost }) => {
         >
           <option value="">Select a game</option>
           {upcomingGames.map((game) => (
-            <option key={game.id} value={game.id}>
-              {game.homeTeam} vs {game.awayTeam} -{" "}
-              {new Date(game.date.seconds * 1000).toLocaleString()}
+            <option key={game.matchID} value={game.matchID}>
+              {game.team1.teamName} vs {game.team2.teamName} -{" "}
+              {new Date(game.matchDateTime).toLocaleString()}
             </option>
           ))}
         </select>
