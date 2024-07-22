@@ -41,10 +41,11 @@ function AuthWrapper({ children }) {
     checkUserSelections();
   }, [currentUser, navigate]);
 
+  return children;
+
   if (loading) {
     return <div>Loading...</div>;
   }
-  return children;
 }
 
 function App() {
