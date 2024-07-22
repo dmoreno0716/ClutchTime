@@ -134,8 +134,8 @@ const PredictionForm = ({ onPredictionPost }) => {
           style={styles.predictionFormSelect}
         >
           <option value="">Select a game</option>
-          {upcomingGames.map((game) => (
-            <option key={game.matchID} value={game.matchID}>
+          {upcomingGames.map((game, index) => (
+            <option key={`${game.matchID}-${index}`} value={game.matchID}>
               {game.team1.teamName} vs {game.team2.teamName} -{" "}
               {new Date(game.matchDateTime).toLocaleString()}
             </option>
