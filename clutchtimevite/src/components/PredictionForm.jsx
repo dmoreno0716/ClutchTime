@@ -84,12 +84,20 @@ const PredictionForm = ({ onPredictionPost }) => {
           allGames = [...allGames, ...games];
         }
 
-        // Sort games by date
-        allGames.sort(
+        const uniqueGames = Array.from(
+          new Map(allGames.map((game) => [game.matchID, game])).values()
+        );
+
+        uniqueGames.sort(
           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
         );
 
-        setUpcomingGames(allGames);
+        // Sort games by date
+        uniqueGames.sort(
+          (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
+        );
+
+        setUpcomingGames(uniqueGames);
       } catch (error) {
         console.error("Error fetching scheduled games:", error);
       }
