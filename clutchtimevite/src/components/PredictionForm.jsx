@@ -91,7 +91,6 @@ const PredictionForm = ({ onPredictionPost }) => {
         console.log("Fetched games: ", games);
 
         const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
-        // setUpcomingGames(gamesWithLeagueId);
 
         const uniqueGames = Array.from(
           new Map(
@@ -122,16 +121,6 @@ const PredictionForm = ({ onPredictionPost }) => {
     if (selectedGameData) {
       fetchTeamStats("bl1", selectedGameData.team1.teamId, setHomeTeamStats);
       fetchTeamStats("bl1", selectedGameData.team2.teamId, setAwayTeamStats);
-      //   fetchTeamStats(
-      //     selectedGameData.leagueId,
-      //     selectedGameData.team1.teamId,
-      //     setHomeTeamStats
-      //   );
-      //   fetchTeamStats(
-      //     selectedGameData.leagueId,
-      //     selectedGameData.team2.teamId,
-      //     setAwayTeamStats
-      //   );
     }
   };
 
@@ -221,16 +210,6 @@ const PredictionForm = ({ onPredictionPost }) => {
       <form onSubmit={handleSubmit}>
         <select
           value={selectedGame}
-          //   onChange={(e) => {
-          //     const newSelectedGame = parseInt(e.target.value, 10);
-          //     console.log(
-          //       "Selected game changed to: ",
-          //       newSelectedGame,
-          //       "Type: ",
-          //       typeof newSelectedGame
-          //     );
-          //     setSelectedGame(newSelectedGame);
-          //   }}
           onChange={handleGameChange}
           style={styles.predictionFormSelect}
         >
