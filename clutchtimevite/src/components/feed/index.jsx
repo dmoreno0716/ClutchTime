@@ -210,6 +210,7 @@ const styles = {
 const Feed = () => {
   const [feedArticles, setFeedArticles] = useState([]);
   const { currentUser } = useAuth();
+  const [userNames, setUserNames] = useState({});
   const [posts, setPosts] = useState([]);
   const [comment, setComment] = useState("");
   const [newComment, setNewComment] = useState("");
@@ -220,6 +221,24 @@ const Feed = () => {
   const [followedLeagues, setFollowedLeagues] = useState([]);
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
+
+  const fetchUserName = async (userId) => {
+    if (userNames[userId]) {
+      return userNames[userId];
+    }
+
+    try {
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (userDoc.exists()) {
+        const fullName = userDoc.data().fullName;
+        setUserNames((prev) => ({ ...prev, [userId]: fullName }));
+        return fullName;
+      }
+    } catch (error) {
+      console.error("Error fetching user name: ", error);
+    }
+    return "Unknown user";
+  };
 
   const { ref, inView } = useInView({
     threshold: 0,
@@ -571,32 +590,48 @@ const Feed = () => {
 
   //ALGORITHM FOR LIKING POSTS
   const handleLike = async (postId) => {
-    const postRef = doc(db, "posts", postId);
-    await updateDoc(postRef, {
-      likes: arrayUnion(currentUser.uid),
-    });
+    try {
+      const postRef = doc(db, "posts", postId);
+      const postSnap = await getDoc(postRef);
 
-    setAllContent((prevContent) =>
-      prevContent.map((item) =>
-        item.id === postId
-          ? { ...item, likes: [...Feed(item.likes || []), currentUser.uid] }
-          : item
-      )
-    );
+      if (postSnap.exists()) {
+        const postData = postSnap.data();
+        const likes = postData.likes || [];
+        const updatedLikes = likes.includes(currentUser.uid)
+          ? likes.filter((uid) => uid !== currentUser.uid)
+          : [...likes, currentUser.uid];
 
-    const likedPost = allContent.find((post) => post.id === postId);
-    if (likedPost) {
-      const relatedPostsQuery = query(
-        collection(db, "posts"),
-        where("gameId", "==", likedPost.gameId),
-        limit(5)
-      );
-      const relatedSnapshot = await getDocs(relatedPostsQuery);
-      const relatedPosts = relatedSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      setAllContent((prevContent) => [...prevContent, ...relatedPosts]);
+        await updateDoc(postRef, {
+          likes: updatedLikes,
+        });
+
+        setAllContent((prevContent) =>
+          prevContent.map((item) =>
+            item.id === postId
+              ? { ...item, likes: [...Feed(item.likes || []), currentUser.uid] }
+              : item
+          )
+        );
+      } else {
+        console.error("Post not found");
+      }
+
+      const likedPost = allContent.find((post) => post.id === postId);
+      if (likedPost) {
+        const relatedPostsQuery = query(
+          collection(db, "posts"),
+          where("gameId", "==", likedPost.gameId),
+          limit(5)
+        );
+        const relatedSnapshot = await getDocs(relatedPostsQuery);
+        const relatedPosts = relatedSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setAllContent((prevContent) => [...prevContent, ...relatedPosts]);
+      }
+    } catch (error) {
+      console.error("Error updating likes: ", error);
     }
   };
 
@@ -739,8 +774,34 @@ const Feed = () => {
     });
   };
 
-  const handlePredictionPost = (newPrediction) => {
-    setAllContent((prevContent) => [newPrediction, ...prevContent]);
+  const handlePredictionPost = async (newPrediction) => {
+    try {
+      const currentDate = new Date();
+      const userDoc = await getDoc(doc(db, "users", newPrediction.userId));
+      const userFullName = userDoc.exists()
+        ? userDoc.data().fullName
+        : "Unknown user";
+
+      const predictionWithName = {
+        ...newPrediction,
+        userFullName,
+        timestamp: serverTimestamp(),
+        clientTimestamp: currentDate,
+        likes: [],
+      };
+
+      const docRef = await addDoc(collection(db, "posts"), predictionWithName);
+
+      setAllContent((prevContent) => {
+        const newItem = Object.assign({}, predictionWithName, {
+          id: docRef.id,
+          timestamp: currentDate,
+        });
+        return [newItem].concat(prevContent);
+      });
+    } catch (error) {
+      console.error("Error posting prediction: ", error);
+    }
   };
 
   const extractKeywords = (text) => {
@@ -867,7 +928,7 @@ const Feed = () => {
                   styles={styles}
                 />
               );
-            } else if (item.predictedHomeScore !== undefined) {
+            } else if (item.type === "prediction") {
               return (
                 <PredictionPost
                   key={`prediction-${item.id}-${index}`}
@@ -875,6 +936,7 @@ const Feed = () => {
                   onLike={handleLike}
                   onComment={handleComment}
                   styles={styles}
+                  userFullName={item.userFullName}
                 ></PredictionPost>
               );
             } else {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   doc,
   getDoc,
@@ -15,6 +16,8 @@ import { fetchScheduledGamesInLeagueInfo } from "../services/api/getMatchDetails
 
 const PredictionForm = ({ onPredictionPost }) => {
   const [upcomingGames, setUpcomingGames] = useState([]);
+  const [homeTeamStats, setHomeTeamStats] = useState(null);
+  const [awayTeamStats, setAwayTeamStats] = useState(null);
   const [selectedGame, setSelectedGame] = useState("");
   const [homeScore, setHomeScore] = useState("");
   const [awayScore, setAwayScore] = useState("");
@@ -63,10 +66,21 @@ const PredictionForm = ({ onPredictionPost }) => {
       fontSize: "16px",
       fontWeight: "bold",
     },
+    winProbabilities: {
+      fontSize: "18px",
+      fontWeight: "bold",
+      marginBottom: "15px",
+      color: "#ffffff",
+    },
   };
 
   useEffect(() => {
     const fetchGames = async () => {
+      if (!currentUser) {
+        console.log("No current User, not fetching games");
+        return;
+      }
+
       try {
         // Fetch user's followed leagues
         const userRef = doc(db, "users", currentUser.uid);
@@ -81,18 +95,16 @@ const PredictionForm = ({ onPredictionPost }) => {
             "bl2",
             "2024"
           );
+          console.log(`Games for ${league}: `, games);
           allGames = [...allGames, ...games];
         }
+
+        console.log("All games before filtering: ", allGames);
 
         const uniqueGames = Array.from(
           new Map(allGames.map((game) => [game.matchID, game])).values()
         );
 
-        uniqueGames.sort(
-          (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
-        );
-
-        // Sort games by date
         uniqueGames.sort(
           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
         );
@@ -106,30 +118,105 @@ const PredictionForm = ({ onPredictionPost }) => {
     fetchGames();
   }, [currentUser]);
 
+  const handleGameChange = (e) => {
+    const newSelectedGame = parseInt(e.target.value, 10);
+    setSelectedGame(newSelectedGame);
+
+    const selectedGameData = upcomingGames.find(
+      (game) => game.matchID === newSelectedGame
+    );
+    if (selectedGameData) {
+      fetchTeamStats(
+        selectedGameData.leagueId,
+        selectedGameData.team1.teamId,
+        setHomeTeamStats
+      );
+      fetchTeamStats(
+        selectedGameData.leagueId,
+        selectedGameData.team2.teamId,
+        setAwayTeamStats
+      );
+    }
+  };
+
+  const calculateWinProbability = (teamStats, opponentStats) => {
+    if (!teamStats || !opponentStats) {
+      return null;
+    }
+
+    const teamGoalDiff = teamStats.goalsScored - teamStats.goalsConceded;
+    const opponentGoalDiff =
+      opponentStats.goalsScored - opponentStats.goalsConceded;
+    const totalDiff = Math.abs(teamGoalDiff) + Math.abs(opponentGoalDiff);
+
+    if (totalDiff === 0) {
+      return 50; //equal probability if no goals
+    }
+
+    return Math.round(((teamGoalDiff + totalDiff) / (2 * totalDiff)) * 100);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedGame || !homeScore || !awayScore) return;
+    console.log("Submitting prediction for game: ", selectedGame);
+    console.log("Current upcoming games: ", upcomingGames);
 
-    const game = upcomingGames.find((game) => game.matchID === selectedGame);
-    const prediction = {
-      userId: currentUser.uid,
-      matchID: selectedGame,
-      homeTeam: game.team1.teamName,
-      awayTeam: game.team2.teamName,
-      predictedHomeScore: parseInt(homeScore),
-      predictedAwayScore: parseInt(awayScore),
-      timestamp: serverTimestamp(),
-      type: "prediction",
-      likes: [],
-      comments: [],
-    };
+    if (!selectedGame || !homeScore || !awayScore) {
+      console.error("Please fill in all of the fields!");
+      return;
+    }
 
-    const docRef = await addDoc(collection(db, "posts"), prediction);
-    onPredictionPost({ id: docRef.id, ...prediction });
+    const selectedGameId =
+      typeof selectedGame === "string"
+        ? parseInt(selectedGame, 10)
+        : selectedGame;
 
-    setSelectedGame("");
-    setHomeScore("");
-    setAwayScore("");
+    const game = upcomingGames.find((game) => game.matchID === selectedGameId);
+
+    if (!game) {
+      console.error(`Game with ID ${selectedGame} not found`);
+      return;
+    }
+
+    if (!game.team1 || !game.team2) {
+      console.error(`Game data is incomplete for game with ID ${selectedGame}`);
+      return;
+    }
+
+    try {
+      const prediction = {
+        userId: currentUser.uid,
+        matchID: selectedGame,
+        homeTeam: game.team1.teamName,
+        awayTeam: game.team2.teamName,
+        predictedHomeScore: parseInt(homeScore),
+        predictedAwayScore: parseInt(awayScore),
+        timestamp: serverTimestamp(),
+        type: "prediction",
+        likes: [],
+        comments: [],
+      };
+
+      const docRef = await addDoc(collection(db, "posts"), prediction);
+      onPredictionPost({ id: docRef.id, ...prediction });
+
+      setSelectedGame("");
+      setHomeScore("");
+      setAwayScore("");
+    } catch (error) {
+      console.error("Error submitting prediction: ", error);
+    }
+  };
+
+  const fetchTeamStats = async (leagueId, teamId, setStatsFunction) => {
+    try {
+      const response = await axios.get(
+        `http://localhost:3002/dashboard/teamStats/${leagueId}/${teamId}`
+      );
+      setStatsFunction(response.data);
+    } catch (error) {
+      console.error("Error fetching team stats: ", error);
+    }
   };
 
   return (
@@ -138,17 +225,50 @@ const PredictionForm = ({ onPredictionPost }) => {
       <form onSubmit={handleSubmit}>
         <select
           value={selectedGame}
-          onChange={(e) => setSelectedGame(e.target.value)}
+          //   onChange={(e) => {
+          //     const newSelectedGame = parseInt(e.target.value, 10);
+          //     console.log(
+          //       "Selected game changed to: ",
+          //       newSelectedGame,
+          //       "Type: ",
+          //       typeof newSelectedGame
+          //     );
+          //     setSelectedGame(newSelectedGame);
+          //   }}
+          onChange={handleGameChange}
           style={styles.predictionFormSelect}
         >
           <option value="">Select a game</option>
           {upcomingGames.map((game, index) => (
-            <option key={`${game.matchID}-${index}`} value={game.matchID}>
+            <option
+              key={`${game.matchID}-${index}`}
+              value={String(game.matchID)}
+            >
               {game.team1.teamName} vs {game.team2.teamName} -{" "}
               {new Date(game.matchDateTime).toLocaleString()}
             </option>
           ))}
         </select>
+        {selectedGame && homeTeamStats && awayTeamStats && (
+          <div style={styles.winProbabilities}>
+            <p>
+              {
+                upcomingGames.find((g) => g.matchID === selectedGame).team1
+                  .teamName
+              }{" "}
+              Win Probability:{" "}
+              {calculateWinProbability(homeTeamStats, awayTeamStats)}%
+            </p>
+            <p>
+              {
+                upcomingGames.find((g) => g.matchID === selectedGame).team2
+                  .teamName
+              }{" "}
+              Win Probability:{" "}
+              {calculateWinProbability(awayTeamStats, homeTeamStats)}%
+            </p>
+          </div>
+        )}
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <input
             type="number"
@@ -169,6 +289,7 @@ const PredictionForm = ({ onPredictionPost }) => {
           Post Prediction
         </button>
       </form>
+      {upcomingGames.length === 0 && <p>No upcoming games available...</p>}
     </div>
   );
 };
