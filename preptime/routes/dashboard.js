@@ -7,6 +7,55 @@ router.get("/", (req, res) => {
   res.send("DASHBOARD API IS RUNNING");
 });
 
+router.get("/teamStats/:leagueId/:teamId", async (req, res) => {
+  const { leagueId, teamId } = req.params;
+
+  if (!leagueId || !teamId) {
+    return res
+      .status(400)
+      .json({ error: "League ID and Team ID are required" });
+  }
+
+  try {
+    //fetches last 10 matches
+    const response = await axios.get(
+      `https://api.openligadb.de/getmatchdata/${leagueId}`
+    );
+    const allMatches = response.data;
+    const teamMatches = allMatches
+      .filter(
+        (match) =>
+          match.team1.teamId === parseInt(teamId) ||
+          match.team2.teamId === parseInt(teamId)
+      )
+      .slice(-10);
+
+    //calculates goals scored and conceded
+    let goalsScored = 0;
+    let goalsConceded = 0;
+    teamMatches.forEach((match) => {
+      if (match.team1.teamId === parseInt(teamId)) {
+        goalsScored += match.matchResults[0].pointsTeam1;
+        goalsConceded += match.matchResults[0].pointsTeam2;
+      } else {
+        goalsScored += match.matchResults[0].pointsTeam2;
+        goalsConceded += match.matchResults[0].pointsTeam1;
+      }
+    });
+    res.json({ goalsScored, goalsConceded, matchesPlayed: teamMatches.length });
+  } catch (error) {
+    console.error(
+      `Error fetching team stats for ${teamId} in league ${leagueId}: `,
+      error.message
+    );
+    res
+      .status(500)
+      .json({
+        error: `Unable to fetch team stats for ${teamId} in league ${leagueId}`,
+      });
+  }
+});
+
 router.get("matchesbyteam/:team/:weeksPast/:weeksFuture", async (req, res) => {
   const { team, weeksPast, weeksFuture } = req.params;
 
@@ -26,11 +75,9 @@ router.get("matchesbyteam/:team/:weeksPast/:weeksFuture", async (req, res) => {
       `Error fetching matches for ${team} ${weeksPast} ${weeksFuture}:`,
       error.message
     );
-    res
-      .status(500)
-      .json({
-        error: `Unable to fetch match data for ${team} ${weeksPast} ${weeksFuture}`,
-      });
+    res.status(500).json({
+      error: `Unable to fetch match data for ${team} ${weeksPast} ${weeksFuture}`,
+    });
   }
 });
 

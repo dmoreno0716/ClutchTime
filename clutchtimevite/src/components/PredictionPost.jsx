@@ -1,17 +1,33 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase/firebase";
 
-const PredictionPost = ({ prediction, onLike, onComment, styles }) => {
+const PredictionPost = ({
+  prediction,
+  onLike,
+  onComment,
+  styles,
+  userFullName,
+}) => {
   const [newComment, setNewComment] = useState("");
+
+  const formatDate = (timestamp) => {
+    if (timestamp instanceof Date) {
+      return timestamp.toLocaleString();
+    } else if (timestamp && typeof timestamp.toDate === "function") {
+      return timestamp.toDate().toLocaleString();
+    } else {
+      return "Unknown time";
+    }
+  };
 
   return (
     <div style={styles.post}>
       <div style={styles.postContent}>
         <div style={styles.postHeader}>
-          <span style={styles.userName}>{prediction.userId}</span>
+          <span style={styles.userName}>{userFullName || "Unknown User"}</span>
           <span style={styles.postTime}>
-            {prediction.timestamp && prediction.timestamp.toDate
-              ? prediction.timestamp.toDate().toLocaleString()
-              : "unknown time"}
+            {formatDate(prediction.timestamp)}
           </span>
         </div>
         <p>
