@@ -7,6 +7,126 @@ router.get("/", (req, res) => {
   res.send("DASHBOARD API IS RUNNING");
 });
 
+router.get("matchesbyteam/:team/:weeksPast/:weeksFuture", async (req, res) => {
+  const { team, weeksPast, weeksFuture } = req.params;
+
+  if (!team || !weeksPast || !weeksFuture) {
+    return res
+      .status(400)
+      .json({ error: "Team, past weeks and future weeks are required" });
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openligadb.de/getmatchesbyteam/${team}/${weeksPast}/${weeksFuture}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error(
+      `Error fetching matches for ${team} ${weeksPast} ${weeksFuture}:`,
+      error.message
+    );
+    res
+      .status(500)
+      .json({
+        error: `Unable to fetch match data for ${team} ${weeksPast} ${weeksFuture}`,
+      });
+  }
+});
+
+router.get("availableteams/:league/:season", async (req, res) => {
+  const { league, season } = req.params;
+
+  if (!league || !season) {
+    return res
+      .status(400)
+      .json({ error: "Both league and season are required" });
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openligadb.de/getavailableteams/${league}/${season}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error(
+      `Error fetching teams for ${league} ${season}:`,
+      error.message
+    );
+    res
+      .status(500)
+      .json({ error: `Unable to fetch team data for ${league} ${season}` });
+  }
+});
+
+router.get("/lastmatchbyleagueteam/:league/:team", async (req, res) => {
+  const { league, team } = req.params;
+
+  if (!league || !team) {
+    return res.status(400).json({ error: "Both league and team are required" });
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openligadb.de/getlastmatchbyleagueteam${league}/${team}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error(
+      `Error fetching last matches for ${league} ${team}:`,
+      error.message
+    );
+    res
+      .status(500)
+      .json({ error: `Unable to fetch last match data for ${league} ${team}` });
+  }
+});
+
+//next matches
+router.get("/nextmatchbyleagueteam/:league/:team", async (req, res) => {
+  const { league, team } = req.params;
+
+  if (!league || !team) {
+    return res.status(400).json({ error: "Both league and team are required" });
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openligadb.de/getnextmatchbyleagueteam/${league}/${team}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error(
+      `Error fetching next matches for ${league} ${team}:`,
+      error.message
+    );
+    res
+      .status(500)
+      .json({ error: `Unable to fetch next match data for ${league} ${team}` });
+  }
+});
+
+//next matches by league (for predictions drop down)
+router.get("/nextmatchbyleagueshortcut/:league", async (req, res) => {
+  const { league } = req.params;
+
+  if (!league) {
+    return res.status(400).json({ error: "League is required" });
+  }
+
+  try {
+    const response = await axios.get(
+      `https://api.openligadb.de/getnextmatchbyleagueshortcut/${league}`
+    );
+    res.json(response.data);
+  } catch (error) {
+    console.error(`Error fetching next matches for ${league}:`, error.message);
+    res
+      .status(500)
+      .json({ error: `Unable to fetch next match data for ${league}` });
+  }
+});
+
 router.get("/allMatches/:league/:season", async (req, res) => {
   const { league, season } = req.params;
 
