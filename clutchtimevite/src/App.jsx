@@ -16,6 +16,7 @@ import LeagueSelection from "./components/LeagueSelection";
 import { useEffect, useState } from "react";
 import { db } from "./firebase/firebase";
 import { doc, getDoc } from "firebase/firestore";
+import TeamSelection from "./components/TeamSelection";
 
 function AuthWrapper({ children }) {
   const { currentUser } = useAuth();
@@ -23,20 +24,21 @@ function AuthWrapper({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const checkUserLeagues = async () => {
+    const checkUserSelections = async () => {
       if (currentUser) {
         const userRef = doc(db, "users", currentUser.uid);
         const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
-
-        if (!userData.hasSelectedLeagues) {
-          navigate("/select-leagues");
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          if (!userData.hasSelectedLeagues) {
+            navigate("/select-leagues");
+          } else if (!userData.hasSelectedTeams) {
+            navigate("/select-teams");
+          }
         }
       }
-      setLoading(false);
     };
-
-    checkUserLeagues();
+    checkUserSelections();
   }, [currentUser, navigate]);
 
   if (loading) {
@@ -50,7 +52,6 @@ function App() {
     <Router>
       <AuthProvider>
         <AuthWrapper>
-          {/*<Header />*/}
           <Header></Header>
           <div className="App-content">
             <Routes>
@@ -65,6 +66,7 @@ function App() {
                 path="/select-leagues"
                 element={<LeagueSelection />}
               ></Route>
+              <Route path="/select-teams" element={<TeamSelection />}></Route>
             </Routes>
           </div>
         </AuthWrapper>
