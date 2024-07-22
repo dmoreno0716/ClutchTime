@@ -84,12 +84,20 @@ const PredictionForm = ({ onPredictionPost }) => {
           allGames = [...allGames, ...games];
         }
 
-        // Sort games by date
-        allGames.sort(
+        const uniqueGames = Array.from(
+          new Map(allGames.map((game) => [game.matchID, game])).values()
+        );
+
+        uniqueGames.sort(
           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
         );
 
-        setUpcomingGames(allGames);
+        // Sort games by date
+        uniqueGames.sort(
+          (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
+        );
+
+        setUpcomingGames(uniqueGames);
       } catch (error) {
         console.error("Error fetching scheduled games:", error);
       }
@@ -134,8 +142,8 @@ const PredictionForm = ({ onPredictionPost }) => {
           style={styles.predictionFormSelect}
         >
           <option value="">Select a game</option>
-          {upcomingGames.map((game) => (
-            <option key={game.matchID} value={game.matchID}>
+          {upcomingGames.map((game, index) => (
+            <option key={`${game.matchID}-${index}`} value={game.matchID}>
               {game.team1.teamName} vs {game.team2.teamName} -{" "}
               {new Date(game.matchDateTime).toLocaleString()}
             </option>
