@@ -60,8 +60,6 @@ const PostCard = ({ newsItem, onLike, onComment }) => {
     },
   };
 
-  console.log("Rendering PostCard with newsItem:", newsItem);
-
   return (
     <div>
       <div style={styles.postCard}>

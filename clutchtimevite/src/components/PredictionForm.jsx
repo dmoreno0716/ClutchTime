@@ -82,27 +82,21 @@ const PredictionForm = ({ onPredictionPost }) => {
       }
 
       try {
-        // Fetch user's followed leagues
-        const userRef = doc(db, "users", currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        const userData = userSnap.data();
-        const followedLeagues = userData.followedLeagues || [];
+        const leagueId = "bl1";
+        const games = await fetchScheduledGamesInLeagueInfo(
+          setUpcomingGames,
+          leagueId,
+          "2024"
+        );
+        console.log("Fetched games: ", games);
 
-        let allGames = [];
-        for (const league of followedLeagues) {
-          const games = await fetchScheduledGamesInLeagueInfo(
-            setUpcomingGames,
-            "bl2",
-            "2024"
-          );
-          console.log(`Games for ${league}: `, games);
-          allGames = [...allGames, ...games];
-        }
-
-        console.log("All games before filtering: ", allGames);
+        const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
+        // setUpcomingGames(gamesWithLeagueId);
 
         const uniqueGames = Array.from(
-          new Map(allGames.map((game) => [game.matchID, game])).values()
+          new Map(
+            gamesWithLeagueId.map((game) => [game.matchID, game])
+          ).values()
         );
 
         uniqueGames.sort(
@@ -123,19 +117,21 @@ const PredictionForm = ({ onPredictionPost }) => {
     setSelectedGame(newSelectedGame);
 
     const selectedGameData = upcomingGames.find(
-      (game) => game.matchID === newSelectedGame
+      (game) => game.matchID === parseInt(newSelectedGame)
     );
     if (selectedGameData) {
-      fetchTeamStats(
-        selectedGameData.leagueId,
-        selectedGameData.team1.teamId,
-        setHomeTeamStats
-      );
-      fetchTeamStats(
-        selectedGameData.leagueId,
-        selectedGameData.team2.teamId,
-        setAwayTeamStats
-      );
+      fetchTeamStats("bl1", selectedGameData.team1.teamId, setHomeTeamStats);
+      fetchTeamStats("bl1", selectedGameData.team2.teamId, setAwayTeamStats);
+      //   fetchTeamStats(
+      //     selectedGameData.leagueId,
+      //     selectedGameData.team1.teamId,
+      //     setHomeTeamStats
+      //   );
+      //   fetchTeamStats(
+      //     selectedGameData.leagueId,
+      //     selectedGameData.team2.teamId,
+      //     setAwayTeamStats
+      //   );
     }
   };
 
@@ -148,7 +144,7 @@ const PredictionForm = ({ onPredictionPost }) => {
     const opponentGoalDiff =
       opponentStats.goalsScored - opponentStats.goalsConceded;
     const totalDiff = Math.abs(teamGoalDiff) + Math.abs(opponentGoalDiff);
-
+    console.log("total diff: ", totalDiff);
     if (totalDiff === 0) {
       return 50; //equal probability if no goals
     }
@@ -159,7 +155,6 @@ const PredictionForm = ({ onPredictionPost }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log("Submitting prediction for game: ", selectedGame);
-    console.log("Current upcoming games: ", upcomingGames);
 
     if (!selectedGame || !homeScore || !awayScore) {
       console.error("Please fill in all of the fields!");
@@ -216,6 +211,7 @@ const PredictionForm = ({ onPredictionPost }) => {
       setStatsFunction(response.data);
     } catch (error) {
       console.error("Error fetching team stats: ", error);
+      setStatsFunction(null);
     }
   };
 
