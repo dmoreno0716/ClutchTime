@@ -17,45 +17,51 @@ router.get("/teamStats/:leagueId/:teamId", async (req, res) => {
   }
 
   try {
-    //fetches last 10 matches
+    // Fetch the matches for the league
     const response = await axios.get(
-      `https://api.openligadb.de/getmatchdata/${leagueId}`
+      `https://api.openligadb.de/getmatchdata/${leagueId}/2024`
     );
+
+    if (!Array.isArray(response.data)) {
+      throw new Error("Unexpected response format from OpenLigaDB API");
+    }
+
     const allMatches = response.data;
     const teamMatches = allMatches
       .filter(
         (match) =>
-          match.team1.teamId === parseInt(teamId) ||
-          match.team2.teamId === parseInt(teamId)
+          (match.team1.teamId === parseInt(teamId) ||
+            match.team2.teamId === parseInt(teamId)) &&
+          match.matchIsFinished
       )
       .slice(-10);
 
-    //calculates goals scored and conceded
+    // Calculate goals scored and conceded
     let goalsScored = 0;
     let goalsConceded = 0;
     teamMatches.forEach((match) => {
       if (match.team1.teamId === parseInt(teamId)) {
-        goalsScored += match.matchResults[0].pointsTeam1;
-        goalsConceded += match.matchResults[0].pointsTeam2;
+        goalsScored += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
+        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
       } else {
-        goalsScored += match.matchResults[0].pointsTeam2;
-        goalsConceded += match.matchResults[0].pointsTeam1;
+        goalsScored += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
+        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
       }
     });
+
     res.json({ goalsScored, goalsConceded, matchesPlayed: teamMatches.length });
   } catch (error) {
     console.error(
-      `Error fetching team stats for ${teamId} in league ${leagueId}: `,
+      `Error fetching team stats for ${teamId} in league ${leagueId}:`,
       error.message
     );
     res
       .status(500)
       .json({
-        error: `Unable to fetch team stats for ${teamId} in league ${leagueId}`,
+        error: `Unable to fetch team stats for ${teamId} in league ${leagueId}: ${error.message}`,
       });
   }
 });
-
 router.get("matchesbyteam/:team/:weeksPast/:weeksFuture", async (req, res) => {
   const { team, weeksPast, weeksFuture } = req.params;
 
