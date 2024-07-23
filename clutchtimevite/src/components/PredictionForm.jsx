@@ -88,7 +88,6 @@ const PredictionForm = ({ onPredictionPost }) => {
           leagueId,
           "2024"
         );
-        console.log("Fetched games: ", games);
 
         const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
 
@@ -124,21 +123,35 @@ const PredictionForm = ({ onPredictionPost }) => {
     }
   };
 
+  const fetchTeamStats = async (leagueId, teamId, setStatsFunction) => {
+    try {
+      const response = await axios.get(
+        `http://localhost:3002/dashboard/lastTenMatches/${leagueId}/${teamId}`
+      );
+      setStatsFunction(response.data);
+    } catch (error) {
+      console.error("Error fetching team stats: ", error);
+      setStatsFunction(null);
+    }
+  };
+
   const calculateWinProbability = (teamStats, opponentStats) => {
     if (!teamStats || !opponentStats) {
       return null;
     }
-
     const teamGoalDiff = teamStats.goalsScored - teamStats.goalsConceded;
     const opponentGoalDiff =
       opponentStats.goalsScored - opponentStats.goalsConceded;
     const totalDiff = Math.abs(teamGoalDiff) + Math.abs(opponentGoalDiff);
-    console.log("total diff: ", totalDiff);
+
     if (totalDiff === 0) {
-      return 50; //equal probability if no goals
+      return 50; // equal probability if no goal difference
     }
 
-    return Math.round(((teamGoalDiff + totalDiff) / (2 * totalDiff)) * 100);
+    const winProbability = Math.round(
+      ((teamGoalDiff + totalDiff) / (2 * totalDiff)) * 100
+    );
+    return Math.max(0, Math.min(100, winProbability)); //ensures probability is between 0 and 100
   };
 
   const handleSubmit = async (e) => {
@@ -189,18 +202,6 @@ const PredictionForm = ({ onPredictionPost }) => {
       setAwayScore("");
     } catch (error) {
       console.error("Error submitting prediction: ", error);
-    }
-  };
-
-  const fetchTeamStats = async (leagueId, teamId, setStatsFunction) => {
-    try {
-      const response = await axios.get(
-        `http://localhost:3002/dashboard/teamStats/${leagueId}/${teamId}`
-      );
-      setStatsFunction(response.data);
-    } catch (error) {
-      console.error("Error fetching team stats: ", error);
-      setStatsFunction(null);
     }
   };
 

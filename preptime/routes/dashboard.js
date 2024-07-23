@@ -55,11 +55,9 @@ router.get("/teamStats/:leagueId/:teamId", async (req, res) => {
       `Error fetching team stats for ${teamId} in league ${leagueId}:`,
       error.message
     );
-    res
-      .status(500)
-      .json({
-        error: `Unable to fetch team stats for ${teamId} in league ${leagueId}: ${error.message}`,
-      });
+    res.status(500).json({
+      error: `Unable to fetch team stats for ${teamId} in league ${leagueId}: ${error.message}`,
+    });
   }
 });
 router.get("matchesbyteam/:team/:weeksPast/:weeksFuture", async (req, res) => {
@@ -132,6 +130,60 @@ router.get("/lastmatchbyleagueteam/:league/:team", async (req, res) => {
     res
       .status(500)
       .json({ error: `Unable to fetch last match data for ${league} ${team}` });
+  }
+});
+
+//previous 10 matches
+router.get("/lastTenMatches/:leagueId/:teamId", async (req, res) => {
+  const { leagueId, teamId } = req.params;
+
+  if (!leagueId || !teamId) {
+    return res
+      .status(400)
+      .json({ error: "League ID and Team ID are required" });
+  }
+
+  try {
+    const currentYear = new Date().getFullYear();
+    const response = await axios.get(
+      `https://api.openligadb.de/getmatchdata/${leagueId}/2023`
+    );
+
+    if (!Array.isArray(response.data)) {
+      throw new Error("Unexpected response format from OpenLigaDB API");
+    }
+
+    const allMatches = response.data;
+    const teamMatches = allMatches
+      .filter(
+        (match) =>
+          (match.team1.teamId === parseInt(teamId) ||
+            match.team2.teamId === parseInt(teamId)) &&
+          match.matchIsFinished
+      )
+      .slice(-10);
+
+    let goalsScored = 0;
+    let goalsConceded = 0;
+    teamMatches.forEach((match) => {
+      if (match.team1.teamId === parseInt(teamId)) {
+        goalsScored += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
+        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
+      } else {
+        goalsScored += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
+        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
+      }
+    });
+
+    res.json({ goalsScored, goalsConceded, matchesPlayed: teamMatches.length });
+  } catch (error) {
+    console.error(
+      `Error fetching last 10 matches for ${teamId} in league ${leagueId}:`,
+      error.message
+    );
+    res.status(500).json({
+      error: `Unable to fetch last 10 matches for ${teamId} in league ${leagueId}: ${error.message}`,
+    });
   }
 });
 
