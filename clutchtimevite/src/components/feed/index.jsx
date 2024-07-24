@@ -483,6 +483,8 @@ const Feed = () => {
         });
         return sortedContent;
       });
+
+      await updateWordWeights(newsItem);
     } catch (error) {
       console.error("Error in handleNewsLike: ", error);
     }
@@ -546,6 +548,7 @@ const Feed = () => {
             : item
         )
       );
+      updateWordWeights(newsItem);
     } catch (error) {
       console.error("Error in handleNewsComment: ", error);
     }
@@ -810,24 +813,27 @@ const Feed = () => {
     return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
   };
 
-  const calculateRanking = (article, userKeywords, currentUserId) => {
-    //calculates keyword score
-    const articleKeywords = extractKeywords(
-      article.title + " " + article.description
-    );
-    const keywordScore = articleKeywords.filter((keyword) =>
-      userKeywords.includes(keyword)
-    ).length;
+  const calculateRanking = (
+    post,
+    userKeywords,
+    currentUserId,
+    wordWeights = {}
+  ) => {
+    // calculates keyword score
+    const postKeywords = extractKeywords(post.title + " " + post.description);
+    const keywordScore = postKeywords.reduce((score, keyword) => {
+      return score + (wordWeights[keyword] || 0);
+    }, 0);
 
-    //calculates user action score
-    const likeWeight = article.likes.includes(currentUserId) ? 1 : 0;
+    // calculates user action score
+    const likeWeight = post.likes.includes(currentUserId) ? 1 : 0;
     const commentWeight =
-      article.comments.filter((comment) => comment.user === currentUserId)
-        .length * 5;
+      post.comments.filter((comment) => comment.user === currentUserId).length *
+      5;
     const actionScore = likeWeight + commentWeight;
 
-    //combine scores
-    const totalScore = keywordScore * 2 + actionScore;
+    // combines scores
+    const totalScore = keywordScore + actionScore;
     return totalScore;
   };
 
@@ -836,7 +842,7 @@ const Feed = () => {
     newsPosts,
     numRecommendations = 5
   ) => {
-    //fetches user profile from firebase
+    // Fetch user profile from Firebase
     const userRef = doc(db, "users", userId);
     const userDoc = await getDoc(userRef);
 
@@ -846,9 +852,23 @@ const Feed = () => {
 
     const userKeywords = userDoc.data().preferredKeywords || [];
 
+    // Fetch word weights from Firebase
+    let wordWeights = {};
+    try {
+      const wordWeightsRef = doc(db, "wordWeights", "latest");
+      const wordWeightsDoc = await getDoc(wordWeightsRef);
+      if (wordWeightsDoc.exists()) {
+        wordWeights = wordWeightsDoc.data();
+      } else {
+        console.log("No word weights found, using empty object");
+      }
+    } catch (error) {
+      console.error("Error fetching word weights:", error);
+    }
+
     const scores = newsPosts.map((newsPost) => ({
       ...newsPost,
-      score: calculateRanking(newsPost, userKeywords, userId),
+      score: calculateRanking(newsPost, userKeywords, userId, wordWeights),
     }));
 
     return scores
@@ -906,6 +926,26 @@ const Feed = () => {
       allNewsPosts
     );
     setNews(recommendedNewsPosts);
+  };
+
+  const updateWordWeights = async (post) => {
+    const db = firebase.firestore();
+    const wordWeightsRef = db.collection("wordWeights").doc("latest");
+
+    //extract words from the title and description of post
+    const words = extractKeywords(post.title + " " + post.description);
+
+    await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(wordWeightsRef);
+      const currentWeights = doc.data() || {};
+
+      words.forEach((word) => {
+        //increase weight of each word found in the post
+        currentWeights[word] = (currentWeights[word] || 0) + 1;
+      });
+
+      transaction.set(wordWeightsRef, currentWeights);
+    });
   };
 
   return (
