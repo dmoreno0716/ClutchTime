@@ -135,23 +135,52 @@ const PredictionForm = ({ onPredictionPost }) => {
     }
   };
 
+  const calculateRating = (stats) => {
+    console.log("Stats for rating calculation:", stats);
+    if (!stats) return 0;
+
+    // swiss system rating calculation
+    const winPoints = stats.wins * 3;
+    const drawPoints = stats.draws * 1;
+    const goalDifference = stats.goalsScored - stats.goalsConceded;
+
+    const rating = winPoints + drawPoints + goalDifference;
+
+    console.log("Calculated rating:", rating);
+    return rating;
+  };
+
   const calculateWinProbability = (teamStats, opponentStats) => {
     if (!teamStats || !opponentStats) {
-      return null;
-    }
-    const teamGoalDiff = teamStats.goalsScored - teamStats.goalsConceded;
-    const opponentGoalDiff =
-      opponentStats.goalsScored - opponentStats.goalsConceded;
-    const totalDiff = Math.abs(teamGoalDiff) + Math.abs(opponentGoalDiff);
-
-    if (totalDiff === 0) {
-      return 50; // equal probability if no goal difference
+      console.log("Missing team stats");
+      return 0;
     }
 
-    const winProbability = Math.round(
-      ((teamGoalDiff + totalDiff) / (2 * totalDiff)) * 100
-    );
-    return Math.max(0, Math.min(100, winProbability)); //ensures probability is between 0 and 100
+    console.log("Team stats:", teamStats);
+    console.log("Opponent stats:", opponentStats);
+
+    const teamRating = calculateRating(teamStats);
+    const opponentRating = calculateRating(opponentStats);
+
+    console.log("Team rating:", teamRating);
+    console.log("Opponent rating:", opponentRating);
+
+    if (teamRating === opponentRating) return 50;
+
+    const ratingDifference = teamRating - opponentRating;
+    const winProbability = 1 / (1 + Math.exp(-ratingDifference / 30)); // Adjusted divisor for more balanced probabilities
+
+    console.log("Win probability:", winProbability);
+
+    return Math.round(winProbability * 100);
+  };
+  const adjustProbabilities = (prob1, prob2) => {
+    const total = prob1 + prob2;
+    if (total <= 100) {
+      return [prob1, prob2];
+    }
+    const factor = 100 / total;
+    return [Math.round(prob1 * factor), Math.round(prob2 * factor)];
   };
 
   const handleSubmit = async (e) => {
@@ -227,22 +256,41 @@ const PredictionForm = ({ onPredictionPost }) => {
         </select>
         {selectedGame && homeTeamStats && awayTeamStats && (
           <div style={styles.winProbabilities}>
-            <p>
-              {
-                upcomingGames.find((g) => g.matchID === selectedGame).team1
-                  .teamName
-              }{" "}
-              Win Probability:{" "}
-              {calculateWinProbability(homeTeamStats, awayTeamStats)}%
-            </p>
-            <p>
-              {
-                upcomingGames.find((g) => g.matchID === selectedGame).team2
-                  .teamName
-              }{" "}
-              Win Probability:{" "}
-              {calculateWinProbability(awayTeamStats, homeTeamStats)}%
-            </p>
+            {(() => {
+              console.log("home team stats: ", homeTeamStats);
+              console.log("away team stats: ", awayTeamStats);
+              const homeTeam = upcomingGames.find(
+                (g) => g.matchID === selectedGame
+              ).team1.teamName;
+              const awayTeam = upcomingGames.find(
+                (g) => g.matchID === selectedGame
+              ).team2.teamName;
+              const homeProb = calculateWinProbability(
+                homeTeamStats,
+                awayTeamStats
+              );
+              const awayProb = calculateWinProbability(
+                awayTeamStats,
+                homeTeamStats
+              );
+              const [adjustHomeProb, adjustAwayProb] = adjustProbabilities(
+                homeProb,
+                awayProb
+              );
+              const drawProb = 100 - adjustHomeProb - adjustAwayProb;
+
+              return (
+                <>
+                  <p>
+                    {homeTeam} Win Probability: {adjustHomeProb}%
+                  </p>
+                  <p>
+                    {awayTeam} Win Probability: {adjustAwayProb}%
+                  </p>
+                  <p>Draw Probability: {drawProb}%</p>
+                </>
+              );
+            })()}
           </div>
         )}
         <div style={{ display: "flex", justifyContent: "space-between" }}>

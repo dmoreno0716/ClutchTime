@@ -163,19 +163,54 @@ router.get("/lastTenMatches/:leagueId/:teamId", async (req, res) => {
       )
       .slice(-10);
 
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
     let goalsScored = 0;
     let goalsConceded = 0;
+    let points = 0;
+
     teamMatches.forEach((match) => {
-      if (match.team1.teamId === parseInt(teamId)) {
-        goalsScored += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
-        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
+      const isTeam1 = match.team1.teamId === parseInt(teamId);
+      const team1Goals = parseInt(match.matchResults[0]?.pointsTeam1 || 0);
+      const team2Goals = parseInt(match.matchResults[0]?.pointsTeam2 || 0);
+
+      if (isTeam1) {
+        goalsScored += team1Goals;
+        goalsConceded += team2Goals;
+        if (team1Goals > team2Goals) {
+          wins++;
+          points += 3;
+        } else if (team1Goals === team2Goals) {
+          draws++;
+          points += 1;
+        } else {
+          losses++;
+        }
       } else {
-        goalsScored += parseInt(match.matchResults[0]?.pointsTeam2 || 0);
-        goalsConceded += parseInt(match.matchResults[0]?.pointsTeam1 || 0);
+        goalsScored += team2Goals;
+        goalsConceded += team1Goals;
+        if (team2Goals > team1Goals) {
+          wins++;
+          points += 3;
+        } else if (team1Goals === team2Goals) {
+          draws++;
+          points += 1;
+        } else {
+          losses++;
+        }
       }
     });
 
-    res.json({ goalsScored, goalsConceded, matchesPlayed: teamMatches.length });
+    res.json({
+      wins,
+      draws,
+      losses,
+      goalsScored,
+      goalsConceded,
+      points,
+      matchesPlayed: teamMatches.length,
+    });
   } catch (error) {
     console.error(
       `Error fetching last 10 matches for ${teamId} in league ${leagueId}:`,
