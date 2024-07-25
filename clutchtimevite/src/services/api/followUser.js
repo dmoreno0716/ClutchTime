@@ -1,33 +1,28 @@
-import axios from "axios";
+import { doc, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
+import { db } from "../../firebase/firebase";
 
-export const followUser = async (userToFollowId, currentUserId) => {
-  try {
-    const response = await axios.post(
-      `http://localhost:3002/users/followUser`,
-      {
-        userToFollowId,
-        currentUserId,
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Error following user:", error);
-    throw error;
-  }
+export const followUser = async (currentUserId, userToFollowId) => {
+  const currentUserRef = doc(db, "users", currentUserId);
+  const userToFollowRef = doc(db, "users", userToFollowId);
+
+  await updateDoc(currentUserRef, {
+    following: arrayUnion(userToFollowId),
+  });
+
+  await updateDoc(userToFollowRef, {
+    followers: arrayUnion(currentUserId),
+  });
 };
 
-export const unFollowUser = async (userToUnfollowId, currentUserId) => {
-  try {
-    const response = await axios.post(
-      `http://localhost:3002/users/unfollowUser`,
-      {
-        userToUnfollowId,
-        currentUserId,
-      }
-    );
-    return response.data;
-  } catch (error) {
-    console.error("Error following user:", error);
-    throw error;
-  }
+export const unFollowUser = async (currentUserId, userToUnfollowId) => {
+  const currentUserRef = doc(db, "users", currentUserId);
+  const userToUnfollowRef = doc(db, "users", userToUnfollowId);
+
+  await updateDoc(currentUserRef, {
+    following: arrayRemove(userToUnfollowId),
+  });
+
+  await updateDoc(userToUnfollowRef, {
+    followers: arrayRemove(currentUserId),
+  });
 };

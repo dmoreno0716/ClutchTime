@@ -1,10 +1,15 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "../contexts/authContext";
 import { useNavigate } from "react-router-dom";
 import "./Sidebar.css";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase/firebase";
 
 const Sidebar = () => {
   const { fullName, profileImg } = useAuth();
+  const { currentUser } = useAuth();
+  const [favoriteTeams, setFavoriteTeams] = useState([]);
+  const [followedLeagues, setFollowedLeagues] = useState([]);
   const navigate = useNavigate();
 
   const sidebarStyle = {
@@ -14,10 +19,12 @@ const Sidebar = () => {
     padding: "20px",
     height: "100vh",
   };
+
   const profileStyle = {
     textAlign: "center",
     marginBottom: "20px",
   };
+
   const menuItemStyle = {
     padding: "10px 0",
     cursor: "pointer",
@@ -25,27 +32,42 @@ const Sidebar = () => {
     borderRadius: "5px",
     transition: "background-color 0.3s ease",
   };
-  const favoriteTeamsStyle = {
+
+  const favoriteItemsStyle = {
     marginTop: "20px",
     textAlign: "center",
   };
-  const teamStyle = {
-    marginBottom: "15px",
+
+  const itemButtonStyle = {
+    width: "100%",
     padding: "10px",
+    marginBottom: "10px",
+    backgroundColor: "#2c2c44",
+    color: "white",
+    border: "none",
     borderRadius: "5px",
     cursor: "pointer",
     transition: "background-color 0.3s ease",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
   };
 
-  const teamLogoStyle = {
-    width: "24px",
-    height: "24px",
-    marginRight: "10px",
-    objectFit: "contain",
-  };
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (currentUser) {
+        const userDocRef = doc(db, "users", currentUser.uid);
+        try {
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            setFavoriteTeams(userData.favoriteTeams || []);
+            setFollowedLeagues(userData.followedLeagues || []);
+          }
+        } catch (error) {
+          console.error("Error fetching data: ", error);
+        }
+      }
+    };
+    fetchUserData();
+  }, [currentUser]);
 
   const handleFeedClick = () => {
     navigate("/feed");
@@ -89,39 +111,21 @@ const Sidebar = () => {
       >
         📰 My Feed
       </div>
-      <div className="menu-item" style={menuItemStyle}>
-        👥 Friends List
-      </div>
-      <div className="menu-item" style={menuItemStyle}>
-        ✉️ News
-      </div>
-
-      <div style={favoriteTeamsStyle}>
+      <div style={favoriteItemsStyle}>
         <h4>Favorite Teams</h4>
-        <div className="team-item" style={teamStyle}>
-          <img
-            src="https://picsum.photos/170/100"
-            alt="team logo"
-            style={teamLogoStyle}
-          ></img>
-          Real Madrid
-        </div>
-        <div className="team-item" style={teamStyle}>
-          <img
-            src="https://picsum.photos/160/100"
-            alt="team logo"
-            style={teamLogoStyle}
-          ></img>
-          Colombia
-        </div>
-        <div className="team-item" style={teamStyle}>
-          <img
-            src="https://picsum.photos/150/100"
-            alt="team logo"
-            style={teamLogoStyle}
-          ></img>
-          Inter-Miami
-        </div>
+        {favoriteTeams.map((team, index) => (
+          <button key={index} style={itemButtonStyle}>
+            {team}
+          </button>
+        ))}
+      </div>
+      <div style={favoriteItemsStyle}>
+        <h4>Favorite Leagues</h4>
+        {followedLeagues.map((league, index) => (
+          <button key={index} style={itemButtonStyle}>
+            {league}
+          </button>
+        ))}
       </div>
     </div>
   );

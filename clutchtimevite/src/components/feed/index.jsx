@@ -19,6 +19,7 @@ import {
   addDoc,
   serverTimestamp,
   setDoc,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "../../firebase/firebase";
 import {
@@ -288,11 +289,11 @@ const Feed = () => {
             return {
               id: postDoc.id,
               ...postData,
-              author: {
-                id: postData.authorId,
-                fullName: authorData.fullName || "Unknown User",
-                profileImg: authorData.profileImg || null,
-              },
+              // author: {
+              //   id: postData.authorId,
+              //   fullName: authorData.fullName || "Unknown User",
+              //   profileImg: authorData.profileImg || null,
+              // },
             };
           })
         );
@@ -406,13 +407,13 @@ const Feed = () => {
   }, [news, posts]);
 
   const handleNewsLike = async (newsItem) => {
-    const keywords = extractKeywords(
-      newsItem.title + " " + newsItem.description
-    );
-
     if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
+      const keywords = extractKeywords(
+        newsItem.title + " " + newsItem.description
+      );
+
       const newsRef = doc(db, "news", newsItem.id);
       const newsDoc = await getDoc(newsRef);
 
@@ -446,12 +447,22 @@ const Feed = () => {
 
       // Update allContent state with new recommended news
       setAllContent((prevContent) => {
-        const newContent = [...newRecommendedNews, ...prevContent];
+        const existingIds = new Set(prevContent.map((item) => item.id));
+        const newContent = [
+          ...prevContent,
+          ...newRecommendedNews.filter((item) => !existingIds.has(item.id)),
+        ];
         // Sort newContent by date
         return newContent.sort((a, b) => {
-          const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
-          const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
-          return dateB - dateA;
+          const getDate = (item) => {
+            if (item.date) return new Date(item.date);
+            if (item.timestamp?.toDate) return item.timestamp.toDate();
+            if (item.timestamp && typeof item.timestamp === "object")
+              return item.timestamp;
+            if (item.clientTimestamp) return new Date(item.clientTimestamp);
+            return new Date(0); // fallback to epoch time if no valid date found
+          };
+          return getDate(b) - getDate(a);
         });
       });
 
@@ -527,16 +538,17 @@ const Feed = () => {
 
   const fetchRecommendedNews = async (keywords) => {
     try {
-      const response = await axios
-        .post("http://localhost:3002/news/recommended", {
-          keywords,
+      const response = await axios.post(
+        "http://localhost:3002/news/recommended",
+        {
+          keywords: keywords || [],
           userId: currentUser.uid,
-        })
-        .then(function (response) {
-          return response.data;
-        });
+        }
+      );
+      return response.data;
     } catch (error) {
-      console.error("error: ", error);
+      console.error("Error fetching recommended news:", error);
+      return []; // Return an empty array in case of error
     }
   };
 
@@ -548,8 +560,8 @@ const Feed = () => {
       }
       const sortedContent = [...news, ...recommendedNews, ...posts].sort(
         (a, b) => {
-          const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
-          const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
+          const dateA = a.date ? new Date(a.date) : a.timestamp;
+          const dateB = b.date ? new Date(b.date) : b.timestamp;
           return dateB - dateA;
         }
       );
@@ -562,7 +574,7 @@ const Feed = () => {
   //ALGORITHM FOR LIKING POSTS
   const handleLike = async (postId) => {
     try {
-      const postRef = doc(db, "posts", postId);
+      const postRef = doc(db, "news", postId);
       const postSnap = await getDoc(postRef);
 
       if (postSnap.exists()) {
@@ -691,60 +703,6 @@ const Feed = () => {
     );
   };
 
-  const createPost = async (content) => {
-    try {
-      await addDoc(collection(db, "posts"), {
-        authorId: currentUser.uid,
-        content: content,
-        timestamp: serverTimestamp(),
-        likes: [],
-        comments: [],
-      });
-    } catch (error) {
-      console.error("Error creating post", error);
-    }
-  };
-
-  const followUser = async (userIdToFollow) => {
-    try {
-      const userRef = doc(db, "users", currentUser.uid);
-      await updateDoc(userRef, {
-        followingUsers: arrayUnion(userIdToFollow),
-      });
-    } catch (error) {
-      console.error("Error following user: ", error);
-    }
-  };
-
-  const saveNewsItem = async (newsData) => {
-    try {
-      const docRef = await addDoc(collection(db, "news"), {
-        title: newsData.title,
-        content: newsData.content,
-        league: newsData.league,
-        date: serverTimestamp(),
-        likes: [],
-        comments: [],
-      });
-
-      await updateDoc(docRef, {
-        id: docRef.id,
-      });
-    } catch (error) {
-      console.error("error adding document: ", error);
-    }
-  };
-
-  const createUserDocument = async (user) => {
-    await setDoc(doc(db, "users", user.uid), {
-      email: user.email,
-      fullName: user.fullName,
-      followedLeagues: [],
-      likedNews: [],
-      commentedNews: [],
-    });
-  };
-
   const handlePredictionPost = async (newPrediction) => {
     try {
       const currentDate = new Date();
@@ -779,121 +737,6 @@ const Feed = () => {
     const words = text.toLowerCase().split(/\W+/); //converts text to lowercas and splits into words
 
     return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
-  };
-
-  const calculateRanking = (
-    post,
-    userKeywords,
-    currentUserId,
-    wordWeights = {}
-  ) => {
-    // calculates keyword score
-    const postKeywords = extractKeywords(post.title + " " + post.description);
-    const keywordScore = postKeywords.reduce((score, keyword) => {
-      return score + (wordWeights[keyword] || 0);
-    }, 0);
-
-    // calculates user action score
-    const likeWeight = post.likes.includes(currentUserId) ? 1 : 0;
-    const commentWeight =
-      post.comments.filter((comment) => comment.user === currentUserId).length *
-      5;
-    const actionScore = likeWeight + commentWeight;
-
-    // combines scores
-    const totalScore = keywordScore + actionScore;
-    return totalScore;
-  };
-
-  const getRecommendations = async (
-    userId,
-    newsPosts,
-    numRecommendations = 5
-  ) => {
-    // Fetch user profile from Firebase
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
-
-    if (!userDoc.exists()) {
-      return [];
-    }
-
-    const userKeywords = userDoc.data().preferredKeywords || [];
-
-    // Fetch word weights from Firebase
-    let wordWeights = {};
-    try {
-      const wordWeightsRef = doc(db, "wordWeights", "latest");
-      const wordWeightsDoc = await getDoc(wordWeightsRef);
-      if (wordWeightsDoc.exists()) {
-        wordWeights = wordWeightsDoc.data();
-      } else {
-        console.log("No word weights found, using empty object");
-      }
-    } catch (error) {
-      console.error("Error fetching word weights:", error);
-    }
-
-    const scores = newsPosts.map((newsPost) => ({
-      ...newsPost,
-      score: calculateRanking(newsPost, userKeywords, userId, wordWeights),
-    }));
-
-    return scores
-      .sort((a, b) => b.score - a.score)
-      .slice(0, numRecommendations);
-  };
-
-  const fetchAllNewsPosts = async () => {
-    try {
-      const newsRef = collection(db, "news");
-      const snapshot = await getDocs(newsRef);
-      return snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-    } catch (error) {
-      "Error fetching news posts: ", error;
-      return [];
-    }
-  };
-
-  const RecommendedNewsPosts = ({ userId }) => {
-    const [recommendations, setRecommendations] = useState([]);
-
-    useEffect(() => {
-      const fetchRecommendations = async () => {
-        const allNewsPosts = await fetchAllNewsPosts();
-        const recommendedNewsPosts = await getRecommendations(
-          userId,
-          allNewsPosts
-        );
-        setRecommendations(recommendedNewsPosts);
-      };
-      fetchRecommendations();
-    }, [userId]);
-
-    return (
-      <div>
-        {recommendations.map((newsPost) => (
-          <PostCard
-            key={newsPost.id}
-            newsItem={newsPost}
-            onLike={handleNewsLike}
-            onComment={handleNewsComment}
-          />
-        ))}
-      </div>
-    );
-  };
-
-  const fetchFeedNewsPosts = async () => {
-    const allNewsPosts = await fetchAllNewsPosts();
-    const recommendedNewsPosts = await getRecommendations(
-      currentUser.uid,
-      allNewsPosts
-    );
-    setNews(recommendedNewsPosts);
   };
 
   const updateWordWeights = async (newsItem) => {

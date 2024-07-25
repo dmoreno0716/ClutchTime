@@ -4,6 +4,17 @@ const router = express.Router();
 const natural = require("natural");
 const TfIdf = natural.TfIdf;
 
+const fetchWithRetry = async (url, maxRetries = 3) => {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await axios.get(url, { timeout: 10000 });
+    } catch (error) {
+      if (i === maxRetries - 1) throw error;
+      await new Promise((res) => setTimeout(res, 1000));
+    }
+  }
+};
+
 const fetchAllNews = async () => {
   const sources = [
     "onefootball",
@@ -19,12 +30,19 @@ const fetchAllNews = async () => {
   let allNews = [];
   for (let source of sources) {
     try {
-      const response = await axios.get(
+      const response = await fetchWithRetry(
         `https://footballnewsapi.netlify.app/.netlify/functions/api/news/${source}`
       );
-      allNews = allNews.concat(response.data);
+      const newsWithMetadata = response.data.map((item, index) => ({
+        ...item,
+        id: `${source}_${index}`,
+        timestamp: item.publishedAt || new Date().toISOString(),
+        source: source,
+      }));
+      allNews = allNews.concat(newsWithMetadata);
     } catch (error) {
       console.error(`Error fetching news from ${source}:`, error);
+      continue;
     }
   }
   return allNews;
@@ -55,8 +73,22 @@ router.get("/", (req, res) => {
   res.send("NEWS API IS RUNNING");
 });
 
+router.get("/all", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const allNews = await fetchAllNews();
+    res.json(allNews.slice(0, limit));
+  } catch (error) {
+    console.error("Error fetching all news:", error);
+    res.status(500).json({ error: "Unable to fetch all news" });
+  }
+});
+
 router.post("/recommended", async (req, res) => {
   const { keywords, userId } = req.body;
+  if (!keywords || !Array.isArray(keywords)) {
+    return res.status(400).json({ error: "Invalid or missing keywords" });
+  }
   try {
     const allNews = await fetchAllNews();
     const rankedNews = rankNewsByKeywords(allNews, keywords);
