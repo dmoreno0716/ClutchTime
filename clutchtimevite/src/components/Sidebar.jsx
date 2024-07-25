@@ -10,6 +10,8 @@ const Sidebar = () => {
   const { currentUser } = useAuth();
   const [favoriteTeams, setFavoriteTeams] = useState([]);
   const [followedLeagues, setFollowedLeagues] = useState([]);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   const navigate = useNavigate();
 
   const sidebarStyle = {
@@ -60,6 +62,8 @@ const Sidebar = () => {
             const userData = userDocSnap.data();
             setFavoriteTeams(userData.favoriteTeams || []);
             setFollowedLeagues(userData.followedLeagues || []);
+            setFollowersCount(userData.followers?.length || 0);
+            setFollowingCount(userData.following?.length || 0);
           }
         } catch (error) {
           console.error("Error fetching data: ", error);
@@ -91,8 +95,8 @@ const Sidebar = () => {
         />
         <h2>{fullName}</h2>
         <div className="followersAndFollowing">
-          <span style={{ padding: "30px" }}>10 </span>
-          <span style={{ padding: "25px" }}> 20</span>
+          <span style={{ padding: "30px" }}>{followersCount} </span>
+          <span style={{ padding: "25px" }}> {followingCount}</span>
         </div>
         <span style={{ fontSize: "80%", padding: "10px" }}>✅Followers </span>
         <span style={{ fontSize: "80%", padding: "10px" }}>➕Following</span>
