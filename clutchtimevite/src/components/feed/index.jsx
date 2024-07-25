@@ -28,10 +28,10 @@ import {
   fetchNewsInfo,
   fetchUCLNews,
 } from "../../services/api/getNewsInfo";
-import PostCard from "../PostCard";
 import PredictionForm from "../PredictionForm";
 import PredictionPost from "../PredictionPost";
 import stopwords from "stopwords-en";
+import axios from "axios";
 
 const styles = {
   app: {
@@ -221,6 +221,7 @@ const Feed = () => {
   const [followedLeagues, setFollowedLeagues] = useState([]);
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
+  const [recommendedNews, setRecommendedNews] = useState([]);
 
   const fetchUserName = async (userId) => {
     if (userNames[userId]) {
@@ -319,6 +320,7 @@ const Feed = () => {
       fetchPosts(lastVisible);
     }
   }, [inView, fetchPosts, lastVisible, loading, hasMore]);
+
   useEffect(() => {
     const fetchUserLeaguesAndNews = async () => {
       if (currentUser) {
@@ -411,77 +413,46 @@ const Feed = () => {
     if (!currentUser || !newsItem || !newsItem.id) return;
 
     try {
-      const userRef = doc(db, "users", currentUser.uid);
       const newsRef = doc(db, "news", newsItem.id);
       const newsDoc = await getDoc(newsRef);
 
-      //stores keywords
-      await updateDoc(userRef, {
-        preferredKeywords: arrayUnion(...keywords),
-      });
-
-      let currentLikes = [];
+      let updatedLikes = [];
       if (!newsDoc.exists()) {
-        // if the document doesn't exist, create it
         await setDoc(newsRef, {
           ...newsItem,
           likes: [currentUser.uid],
         });
-        currentLikes = [currentUser.uid];
+        updatedLikes = [currentUser.uid];
       } else {
-        currentLikes = newsDoc.data().likes || [];
-      }
+        const currentLikes = newsDoc.data().likes || [];
+        updatedLikes = currentLikes.includes(currentUser.uid)
+          ? currentLikes.filter((uid) => uid !== currentUser.uid)
+          : [...currentLikes, currentUser.uid];
 
-      const userIndex = currentLikes.indexOf(currentUser.uid);
-      let updatedLikes;
-      if (userIndex > -1) {
-        // user already liked, so unlike
-        updatedLikes = currentLikes.filter((uid) => uid !== currentUser.uid);
-      } else {
-        // user hasn't liked, so add like
-        updatedLikes = [...currentLikes, currentUser.uid];
-      }
-
-      // update Firestore
-      await updateDoc(newsRef, {
-        likes: updatedLikes,
-      });
-      // update local state
-      setNews((prevNews) => {
-        const newNews = prevNews.map((item) =>
-          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
-        );
-        return newNews;
-      });
-
-      // fetch related news
-      const relatedNewsQuery = query(
-        collection(db, "news"),
-        where("league", "==", newsItem.league),
-        limit(5)
-      );
-      const relatedSnapshot = await getDocs(relatedNewsQuery);
-      const relatedNews = relatedSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      // Update allContent
-      setAllContent((prevContent) => {
-        const updatedContent = prevContent.map((item) =>
-          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
-        );
-        relatedNews.forEach((relatedItem) => {
-          if (!updatedContent.some((item) => item.id === relatedItem.id)) {
-            updatedContent.push(relatedItem);
-          }
+        await updateDoc(newsRef, {
+          likes: updatedLikes,
         });
-        const sortedContent = updatedContent.sort((a, b) => {
+      }
+
+      // Update local state
+      setNews((prevNews) =>
+        prevNews.map((item) =>
+          item.id === newsItem.id ? { ...item, likes: updatedLikes } : item
+        )
+      );
+
+      // Fetch recommended news based on keywords
+      const newRecommendedNews = await fetchRecommendedNews(keywords);
+
+      // Update allContent state with new recommended news
+      setAllContent((prevContent) => {
+        const newContent = [...newRecommendedNews, ...prevContent];
+        // Sort newContent by date
+        return newContent.sort((a, b) => {
           const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
           const dateB = b.date ? new Date(b.date) : b.timestamp?.toDate();
           return dateB - dateA;
         });
-        return sortedContent;
       });
 
       await updateWordWeights(newsItem);
@@ -554,22 +525,19 @@ const Feed = () => {
     }
   };
 
-  const fetchRecommendedNews = async () => {
-    const allNewsPosts = await fetchAllNewsPosts();
-
-    const userRef = doc(db, "users", currentUser.uid);
-    const userDoc = await getDoc(userRef);
-    const userKeywords = userDoc.exists()
-      ? userDoc.data().preferredKeywords || []
-      : [];
-
-    const rankedNews = allNewsPosts.map((newsPost) => ({
-      ...newsPost,
-      score: calculateRanking(newsPost, userKeywords, currentUser.uid),
-    }));
-
-    rankedNews.sort((a, b) => b.score - a.score);
-    return rankedNews.slice(0, 3); // returns top 3 recommended news posts
+  const fetchRecommendedNews = async (keywords) => {
+    try {
+      const response = await axios
+        .post("http://localhost:3002/news/recommended", {
+          keywords,
+          userId: currentUser.uid,
+        })
+        .then(function (response) {
+          return response.data;
+        });
+    } catch (error) {
+      console.error("error: ", error);
+    }
   };
 
   useEffect(() => {
@@ -928,24 +896,33 @@ const Feed = () => {
     setNews(recommendedNewsPosts);
   };
 
-  const updateWordWeights = async (post) => {
-    const db = firebase.firestore();
-    const wordWeightsRef = db.collection("wordWeights").doc("latest");
+  const updateWordWeights = async (newsItem) => {
+    try {
+      const keywords = extractKeywords(
+        newsItem.title + " " + newsItem.description
+      );
+      const userRef = doc(db, "users", currentUser.uid);
 
-    //extract words from the title and description of post
-    const words = extractKeywords(post.title + " " + post.description);
-
-    await db.runTransaction(async (transaction) => {
-      const doc = await transaction.get(wordWeightsRef);
-      const currentWeights = doc.data() || {};
-
-      words.forEach((word) => {
-        //increase weight of each word found in the post
-        currentWeights[word] = (currentWeights[word] || 0) + 1;
+      await updateDoc(userRef, {
+        preferredKeywords: arrayUnion(...keywords),
       });
 
-      transaction.set(wordWeightsRef, currentWeights);
-    });
+      const wordWeightsRef = doc(db, "wordWeights", "latest");
+      await runTransaction(db, async (transaction) => {
+        const wordWeightsDoc = await transaction.get(wordWeightsRef);
+        const currentWeights = wordWeightsDoc.exists()
+          ? wordWeightsDoc.data()
+          : {};
+
+        keywords.forEach((word) => {
+          currentWeights[word] = (currentWeights[word] || 0) + 1;
+        });
+
+        transaction.set(wordWeightsRef, currentWeights);
+      });
+    } catch (error) {
+      console.error("Error updating word weights:", error);
+    }
   };
 
   return (
