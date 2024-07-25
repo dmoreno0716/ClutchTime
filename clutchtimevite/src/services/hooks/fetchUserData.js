@@ -1,20 +1,31 @@
-import { auth } from "../../firebase/firebase";
-import { getUserInfo } from "../api/getUserInfo";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../firebase/firebase";
 
-export const fetchUserData = async (setUserData, setIsLoading) => {
-  console.log("Fetching User Data...");
-  if (auth.currentUser) {
-    try {
-      const userId = auth.currentUser.uid;
-      const userInfo = await getUserInfo(userId);
-      setUserData(userInfo);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoading(false);
+export const fetchUserData = async (userId) => {
+  const userDocRef = doc(db, "users", userId);
+  const userDocSnap = await getDoc(userDocRef);
+
+  if (userDocSnap.exists()) {
+    const userData = userDocSnap.data();
+
+    if (userData.following && userData.following.length > 0) {
+      const followingQuery = query(
+        collection(db, "users"),
+        where("__name__", "in", userData.following)
+      );
+      const followingSnapshot = await getDocs(followingQuery);
+
+      const followingNames = {};
+      followingSnapshot.forEach((doc) => {
+        followingNames[doc.id] = doc.data().fullName;
+      });
+
+      userData.followingNames = followingNames;
     }
+
+    return userData;
   } else {
-    console.log("No user is currently signed in.");
-    setIsLoading(false);
+    console.log("No such user!");
+    return null;
   }
 };
