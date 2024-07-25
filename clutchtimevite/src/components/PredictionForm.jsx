@@ -75,42 +75,6 @@ const PredictionForm = ({ onPredictionPost }) => {
     },
   };
 
-  //   useEffect(() => {
-  //     const fetchGames = async () => {
-  //       if (!currentUser) {
-  //         console.log("No current User, not fetching games");
-  //         return;
-  //       }
-
-  //       try {
-  //         const leagueId = "bl1";
-  //         const games = await fetchScheduledGamesInLeagueInfo(
-  //           setUpcomingGames,
-  //           leagueId,
-  //           "2024"
-  //         );
-
-  //         const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
-
-  //         const uniqueGames = Array.from(
-  //           new Map(
-  //             gamesWithLeagueId.map((game) => [game.matchID, game])
-  //           ).values()
-  //         );
-
-  //         uniqueGames.sort(
-  //           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
-  //         );
-
-  //         setUpcomingGames(uniqueGames);
-  //       } catch (error) {
-  //         console.error("Error fetching scheduled games:", error);
-  //       }
-  //     };
-
-  //     fetchGames();
-  //   }, [currentUser]);
-
   useEffect(() => {
     const fetchGamesAndStats = async () => {
       if (!currentUser) {
@@ -200,10 +164,6 @@ const PredictionForm = ({ onPredictionPost }) => {
       return null;
     }
   };
-
-  //first calculate all team ratings based on win/loss against each other
-  //calculate two teams ratings based on the teams they played
-  //calculate ratings based on each other (each team)
 
   const calculateInitialRatings = (allTeamStats) => {
     const ratings = {};

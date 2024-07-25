@@ -289,11 +289,6 @@ const Feed = () => {
             return {
               id: postDoc.id,
               ...postData,
-              // author: {
-              //   id: postData.authorId,
-              //   fullName: authorData.fullName || "Unknown User",
-              //   profileImg: authorData.profileImg || null,
-              // },
             };
           })
         );
