@@ -78,62 +78,6 @@ const PredictionForm = ({ onPredictionPost }) => {
     },
   };
 
-  //   useEffect(() => {
-  //     const fetchGamesAndStats = async () => {
-  //       if (!currentUser) {
-  //         console.log("No current User, not fetching games");
-  //         return;
-  //       }
-
-  //       try {
-  //         const leagueId = "bl1";
-  //         const games = await fetchScheduledGamesInLeagueInfo(leagueId, "2024");
-
-  //         if (!Array.isArray(games)) {
-  //           console.error("Fetched games is not an array:", games);
-  //           return;
-  //         }
-
-  //         const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
-
-  //         const uniqueGames = Array.from(
-  //           new Map(
-  //             gamesWithLeagueId.map((game) => [game.matchID, game])
-  //           ).values()
-  //         );
-
-  //         uniqueGames.sort(
-  //           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
-  //         );
-
-  //         setUpcomingGames(uniqueGames);
-
-  //         const allTeamStats = {};
-  //         for (const game of uniqueGames) {
-  //           if (!allTeamStats[game.team1.teamId]) {
-  //             allTeamStats[game.team1.teamId] = await fetchTeamStats(
-  //               leagueId,
-  //               game.team1.teamId
-  //             );
-  //           }
-  //           if (!allTeamStats[game.team2.teamId]) {
-  //             allTeamStats[game.team2.teamId] = await fetchTeamStats(
-  //               leagueId,
-  //               game.team2.teamId
-  //             );
-  //           }
-  //         }
-
-  //         const initialRatings = calculateInitialRatings(allTeamStats);
-  //         setTeamRatings(initialRatings);
-  //       } catch (error) {
-  //         console.error("Error fetching scheduled games and team stats:", error);
-  //       }
-  //     };
-
-  //     fetchGamesAndStats();
-  //   }, [currentUser]);
-
   useEffect(() => {
     const fetchGamesAndStats = async () => {
       if (!currentUser) {
@@ -265,10 +209,6 @@ const PredictionForm = ({ onPredictionPost }) => {
     }
   };
 
-  //if teamA is stronger than teamB and teamB WINS, then teamB's rating skyrockets
-  //go through matches for teams, if teamA wins from teamB, then teamA becomes 1550, teamB becomes 1350
-  //point system; for all matches; MATCH DATA NOT TEAM DATA
-
   const calculateInitialRatings = (allTeamStats) => {
     const ratings = {};
     Object.keys(allTeamStats).forEach((teamId) => {
@@ -278,7 +218,6 @@ const PredictionForm = ({ onPredictionPost }) => {
   };
 
   const updateRatings = (ratings, matchResults) => {
-    console.log("Updating ratings with match results:", matchResults);
     const newRatings = { ...ratings };
 
     matchResults.forEach((match) => {
@@ -334,82 +273,6 @@ const PredictionForm = ({ onPredictionPost }) => {
 
     return newRatings;
   };
-
-  //   const calculateInitialRatings = (allTeamStats) => {
-  //     const ratings = {};
-
-  //     // Initialize ratings
-  //     Object.keys(allTeamStats).forEach((teamId) => {
-  //       ratings[teamId] = 1500; // Start with a base rating of 1500
-  //     });
-
-  //     // Calculate ratings based on overall stats instead of individual matches
-  //     Object.entries(allTeamStats).forEach(([teamId, stats]) => {
-  //       if (!stats) {
-  //         console.warn(`No stats for team ${teamId}`);
-  //         return;
-  //       }
-
-  //       const totalMatches = stats.wins + stats.draws + stats.losses;
-  //       if (totalMatches === 0) {
-  //         console.warn(`No matches played by team ${teamId}`);
-  //         return;
-  //       }
-
-  //       const winRatio = stats.wins / totalMatches;
-  //       const goalDifference = stats.goalsScored - stats.goalsConceded;
-
-  //       // Adjust rating based on win ratio and goal difference
-  //       ratings[teamId] += (winRatio - 0.5) * 200 + goalDifference * 10;
-  //     });
-
-  //     return ratings;
-  //   };
-
-  const calculateRating = (stats, initialRating) => {
-    if (!stats) return initialRating;
-
-    const totalMatches = stats.wins + stats.draws + stats.losses;
-    if (totalMatches === 0) return initialRating;
-
-    const winRatio = stats.wins / totalMatches;
-    const goalDifference = stats.goalsScored - stats.goalsConceded;
-
-    // Adjust rating based on win ratio and goal difference
-    return initialRating + (winRatio - 0.5) * 200 + goalDifference * 10;
-  };
-
-  //   const calculateWinProbability = (teamStats, opponentStats, teamRatings) => {
-  //     if (
-  //       !teamStats ||
-  //       !opponentStats ||
-  //       !teamRatings ||
-  //       !teamStats.teamId ||
-  //       !opponentStats.teamId
-  //     ) {
-  //       console.log("Missing stats or ratings");
-  //       return 0;
-  //     }
-
-  //     const teamId = teamStats.teamId;
-  //     const opponentId = opponentStats.teamId;
-
-  //     if (!teamRatings[teamId] || !teamRatings[opponentId]) {
-  //       console.log("Missing team ratings");
-  //       return 0;
-  //     }
-
-  //     const teamRating = calculateRating(teamStats, teamRatings[teamId]);
-  //     const opponentRating = calculateRating(
-  //       opponentStats,
-  //       teamRatings[opponentId]
-  //     );
-
-  //     const ratingDifference = teamRating - opponentRating;
-  //     const winProbability = 1 / (1 + Math.pow(10, -ratingDifference / 400));
-
-  //     return Math.round(winProbability * 100);
-  //   };
 
   const calculateWinProbability = (team, opponent, teamRatings) => {
     if (

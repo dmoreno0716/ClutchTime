@@ -209,28 +209,26 @@ const styles = {
 };
 
 const Feed = () => {
-  const [feedArticles, setFeedArticles] = useState([]);
   const { currentUser } = useAuth();
-  const [userNames, setUserNames] = useState({});
   const [posts, setPosts] = useState([]);
   const [comment, setComment] = useState("");
-  const [newComment, setNewComment] = useState("");
-  const [showComments, setShowComments] = useState(false);
-  const [lastVisible, setLastVisible] = useState("");
+
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
   const [followedLeagues, setFollowedLeagues] = useState([]);
   const [news, setNews] = useState([]);
   const [allContent, setAllContent] = useState([]);
-  const [recommendedNews, setRecommendedNews] = useState([]);
 
   const { ref, inView } = useInView({
     threshold: 0,
   });
 
+  //UseEffect for fetching leagues and news based on currentUser
   useEffect(() => {
     const fetchUserLeaguesAndNews = async () => {
       if (currentUser) {
+        setInitialLoading(true);
         let allNews = [];
         try {
           const userRef = doc(db, "users", currentUser.uid);
@@ -296,6 +294,7 @@ const Feed = () => {
           console.error("Error fetching user leagues and news: ", error);
         } finally {
           setLoading(false);
+          setInitialLoading(false);
         }
       }
     };
@@ -303,6 +302,7 @@ const Feed = () => {
     fetchUserLeaguesAndNews();
   }, [currentUser]);
 
+  //UseEffect for loading posts
   useEffect(() => {
     const sortedContent = [...news, ...posts].sort((a, b) => {
       const dateA = a.date ? new Date(a.date) : a.timestamp?.toDate();
@@ -312,6 +312,7 @@ const Feed = () => {
     setAllContent(sortedContent);
   }, [news, posts]);
 
+  //ALGORITHM FOR LIKING NEWS POSTS
   const handleNewsLike = async (newsItem) => {
     if (!currentUser || !newsItem || !newsItem.id) return;
 
@@ -349,9 +350,9 @@ const Feed = () => {
       );
 
       // Fetch recommended news based on keywords
+      setRecommendedLoading(true);
       const newRecommendedNews = await fetchRecommendedNews(keywords);
-      console.log("New recommended news to be added:", newRecommendedNews);
-
+      setRecommendedLoading(false);
       // Update allContent state with new recommended news
       setAllContent((prevContent) => {
         const existingIds = new Set(prevContent.map((item) => item.id));
@@ -386,9 +387,11 @@ const Feed = () => {
       await updateWordWeights(newsItem);
     } catch (error) {
       console.error("Error in handleNewsLike: ", error);
+      setRecommendedLoading(false);
     }
   };
 
+  //ALGORITHM FOR COMMENTING ON NEWS POSTS
   const handleNewsComment = async (newsItem, commentText) => {
     if (!currentUser || !newsItem || !newsItem.id) return;
     try {
@@ -453,22 +456,6 @@ const Feed = () => {
     }
   };
 
-  // const fetchRecommendedNews = async (keywords) => {
-  //   try {
-  //     const response = await axios.post(
-  //       "http://localhost:3002/news/recommended",
-  //       {
-  //         keywords: keywords || [],
-  //         userId: currentUser.uid,
-  //       }
-  //     );
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error("Error fetching recommended news:", error);
-  //     return []; // Return an empty array in case of error
-  //   }
-  // };
-
   //ALGORITHM FOR LIKING POSTS
   const handleLike = async (postId) => {
     try {
@@ -515,7 +502,7 @@ const Feed = () => {
       console.error("Error updating likes: ", error);
     }
   };
-
+  //ALGORITHM FOR COMMENTING ON POSTS
   const handleComment = async (postId, commentText) => {
     if (commentText.trim() === "") return;
 
@@ -689,159 +676,135 @@ const Feed = () => {
     }
   };
 
-  // const extractKeywords = (text) => {
-  //   const words = text.toLowerCase().split(/\W+/); //converts text to lowercas and splits into words
-
-  //   return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
-  // };
-
-  // const updateWordWeights = async (newsItem) => {
-  //   try {
-  //     const keywords = extractKeywords(
-  //       newsItem.title + " " + newsItem.description
-  //     );
-  //     const userRef = doc(db, "users", currentUser.uid);
-
-  //     await updateDoc(userRef, {
-  //       preferredKeywords: arrayUnion(...keywords),
-  //     });
-
-  //     const wordWeightsRef = doc(db, "wordWeights", "latest");
-  //     await runTransaction(db, async (transaction) => {
-  //       const wordWeightsDoc = await transaction.get(wordWeightsRef);
-  //       const currentWeights = wordWeightsDoc.exists()
-  //         ? wordWeightsDoc.data()
-  //         : {};
-
-  //       keywords.forEach((word) => {
-  //         currentWeights[word] = (currentWeights[word] || 0) + 1;
-  //       });
-
-  //       transaction.set(wordWeightsRef, currentWeights);
-  //     });
-  //   } catch (error) {
-  //     console.error("Error updating word weights:", error);
-  //   }
-  // };
-
   return (
     <div style={styles.app}>
       <Sidebar />
       <div style={styles.mainContent}>
         <div style={styles.feed}>
-          <PredictionForm
-            onPredictionPost={handlePredictionPost}
-          ></PredictionForm>
-          {allContent.map((item, index) => {
-            if (item.league) {
-              // This is a news item
-              return (
-                <PostCard
-                  key={`news-${item.id}-${index}`}
-                  newsItem={item}
-                  onLike={handleNewsLike}
-                  onComment={handleNewsComment}
-                  styles={styles}
-                />
-              );
-            } else if (item.type === "prediction") {
-              return (
-                <PredictionPost
-                  key={`prediction-${item.id}-${index}`}
-                  prediction={item}
-                  onLike={handleLike}
-                  onComment={handleComment}
-                  styles={styles}
-                  userFullName={item.userFullName}
-                ></PredictionPost>
-              );
-            } else if (item.league || item.type === "recommended") {
-              return (
-                <PostCard
-                  key={`news-${item.id}-${index}`}
-                  newsItem={item}
-                  onLike={handleNewsLike}
-                  onComment={handleNewsComment}
-                  styles={styles}
-                ></PostCard>
-              );
-            } else {
-              // This is a post
-              return (
-                <div key={`post-${item.id}-${index}`} style={styles.post}>
-                  <div style={styles.postContent}>
-                    <div style={styles.postHeader}>
-                      <span style={styles.userName}></span>
-                      <span style={styles.postTime}>
-                        {item.timestamp && item.timestamp.toDate
-                          ? item.timestamp.toDate().toLocaleString()
-                          : "unknown time"}
-                      </span>
-                    </div>
-                    <p>{item.content}</p>
-                    {item.type === "match" && (
-                      <div style={styles.matchData}>
-                        <span style={styles.liveIndicator}>
-                          {item.matchStatus}
-                        </span>
-                        <div style={styles.teams}>
-                          <div>
-                            {item.teamA} {item.scoreA}
-                          </div>
-                          <div>
-                            {item.teamB} {item.scoreB}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {item.type === "news" && item.imageUrl && (
-                      <img
-                        src={item.imageUrl}
-                        alt="News"
-                        style={{ width: "100%", borderRadius: "10px" }}
-                      />
-                    )}
-                    <div style={styles.postActions}>
-                      <button style={styles.actionButton}>
-                        {item.comments ? item.comments.length : 0} Comments
-                      </button>
-                      <button
-                        style={styles.actionButton}
-                        onClick={() => handleLike(item.id)}
-                      >
-                        {item.likes ? item.likes.length : 0} Likes
-                      </button>
-                    </div>
-                    {item.comments &&
-                      item.comments.map((comment, commentIndex) => (
-                        <div key={commentIndex} style={styles.comment}>
-                          <strong>{comment.user}: </strong>
-                          {comment.content}
-                        </div>
-                      ))}
-                    <input
-                      type="text"
-                      value={comment}
-                      onChange={(e) => setComment(e.target.value)}
-                      placeholder="Add a comment..."
-                      style={styles.commentInput}
+          <PredictionForm onPredictionPost={handlePredictionPost} />
+
+          {initialLoading ? (
+            <div style={styles.loadingMore}>Loading initial content...</div>
+          ) : (
+            <>
+              {allContent.map((item, index) => {
+                if (item.league) {
+                  // This is a news item
+                  return (
+                    <PostCard
+                      key={`news-${item.id}-${index}`}
+                      newsItem={item}
+                      onLike={handleNewsLike}
+                      onComment={handleNewsComment}
+                      styles={styles}
                     />
-                    <button
-                      onClick={() => handleComment(item.id)}
-                      style={styles.postButton}
-                    >
-                      Comment
-                    </button>
-                  </div>
+                  );
+                } else if (item.type === "prediction") {
+                  return (
+                    <PredictionPost
+                      key={`prediction-${item.id}-${index}`}
+                      prediction={item}
+                      onLike={handleLike}
+                      onComment={handleComment}
+                      styles={styles}
+                      userFullName={item.userFullName}
+                    ></PredictionPost>
+                  );
+                } else if (item.league || item.type === "recommended") {
+                  return (
+                    <PostCard
+                      key={`news-${item.id}-${index}`}
+                      newsItem={item}
+                      onLike={handleNewsLike}
+                      onComment={handleNewsComment}
+                      styles={styles}
+                    ></PostCard>
+                  );
+                } else {
+                  // This is a post
+                  return (
+                    <div key={`post-${item.id}-${index}`} style={styles.post}>
+                      <div style={styles.postContent}>
+                        <div style={styles.postHeader}>
+                          <span style={styles.userName}></span>
+                          <span style={styles.postTime}>
+                            {item.timestamp && item.timestamp.toDate
+                              ? item.timestamp.toDate().toLocaleString()
+                              : "unknown time"}
+                          </span>
+                        </div>
+                        <p>{item.content}</p>
+                        {item.type === "match" && (
+                          <div style={styles.matchData}>
+                            <span style={styles.liveIndicator}>
+                              {item.matchStatus}
+                            </span>
+                            <div style={styles.teams}>
+                              <div>
+                                {item.teamA} {item.scoreA}
+                              </div>
+                              <div>
+                                {item.teamB} {item.scoreB}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {item.type === "news" && item.imageUrl && (
+                          <img
+                            src={item.imageUrl}
+                            alt="News"
+                            style={{ width: "100%", borderRadius: "10px" }}
+                          />
+                        )}
+                        <div style={styles.postActions}>
+                          <button style={styles.actionButton}>
+                            {item.comments ? item.comments.length : 0} Comments
+                          </button>
+                          <button
+                            style={styles.actionButton}
+                            onClick={() => handleLike(item.id)}
+                          >
+                            {item.likes ? item.likes.length : 0} Likes
+                          </button>
+                        </div>
+                        {item.comments &&
+                          item.comments.map((comment, commentIndex) => (
+                            <div key={commentIndex} style={styles.comment}>
+                              <strong>{comment.user}: </strong>
+                              {comment.content}
+                            </div>
+                          ))}
+                        <input
+                          type="text"
+                          value={comment}
+                          onChange={(e) => setComment(e.target.value)}
+                          placeholder="Add a comment..."
+                          style={styles.commentInput}
+                        />
+                        <button
+                          onClick={() => handleComment(item.id)}
+                          style={styles.postButton}
+                        >
+                          Comment
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+              })}
+
+              {recommendedLoading && (
+                <div style={styles.loadingMore}>
+                  Loading recommended content...
                 </div>
-              );
-            }
-          })}
+              )}
+            </>
+          )}
 
           {loading && (
             <div style={styles.loadingMore}>Loading More Posts...</div>
           )}
-          <div ref={ref} style={{ height: "20px " }}></div>
+          <div ref={ref} style={{ height: "20px" }}></div>
         </div>
       </div>
     </div>

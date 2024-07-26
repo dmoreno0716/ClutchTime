@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
   async function initializeUser(user) {
     if (user) {
       setCurrentUser({ ...user });
-      // check if provider is email and password login
+      // Check if provider is email and password login
       const isEmail = user.providerData.some(
         (provider) => provider.providerId === "password"
       );
