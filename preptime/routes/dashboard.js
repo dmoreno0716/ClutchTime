@@ -133,7 +133,7 @@ router.get("/lastmatchbyleagueteam/:league/:team", async (req, res) => {
   }
 });
 
-//previous 10 matches
+//Previous 10 matches
 router.get("/lastTenMatches/:leagueId/:teamId", async (req, res) => {
   const { leagueId, teamId } = req.params;
 
@@ -222,7 +222,7 @@ router.get("/lastTenMatches/:leagueId/:teamId", async (req, res) => {
   }
 });
 
-//next matches
+//Next matches
 router.get("/nextmatchbyleagueteam/:league/:team", async (req, res) => {
   const { league, team } = req.params;
 

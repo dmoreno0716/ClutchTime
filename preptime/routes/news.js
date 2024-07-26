@@ -99,21 +99,6 @@ const rankNewsByKeywords = (news, keywords) => {
   return scores.sort((a, b) => b.score - a.score);
 };
 
-// router.post("/recommended", async (req, res) => {
-//   const { keywords, userId } = req.body;
-//   if (!keywords || !Array.isArray(keywords)) {
-//     return res.status(400).json({ error: "Invalid or missing keywords" });
-//   }
-//   try {
-//     const allNews = await fetchAllNews();
-//     const rankedNews = rankNewsByKeywords(allNews, keywords);
-//     res.json(rankedNews.slice(0, 10)); // Return top 10 articles
-//   } catch (error) {
-//     console.error("Error fetching recommended news:", error);
-//     res.status(500).json({ error: "Unable to fetch recommended news" });
-//   }
-// });
-
 router.get("/preprocess", async (req, res) => {
   try {
     //gets news from all the sources
@@ -136,14 +121,14 @@ router.get("/preprocess", async (req, res) => {
       allNews = allNews.concat(response.data);
     }
 
-    //calculates TF-IDF (term frequency-inverse document frequency)
+    //Calculates TF-IDF (term frequency-inverse document frequency)
     const tfidf = new TfIdf();
 
     allNews.forEach((article, index) => {
       tfidf.addDocument(`${article.title} ${article.description}`);
     });
 
-    //creates dictionary for word weight
+    //Creates dictionary for word weight
     let wordWeights = {};
 
     allNews.forEach((article, index) => {
@@ -154,7 +139,7 @@ router.get("/preprocess", async (req, res) => {
       });
     });
 
-    //stores wordWeights into database
+    //Stores wordWeights into database
     res.send({
       message: "Preprocessing complete",
       wordCount: Object.keys(wordWeights).length,

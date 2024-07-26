@@ -7,7 +7,6 @@ export const fetchNewsInfo = async (setNewsData, newsSource) => {
     );
 
     setNewsData(response.data);
-    console.log(response.data);
     return response.data;
   } catch (error) {
     console.error("Error fetching news info", error);
@@ -74,4 +73,3 @@ export const fetchUCLNews = async (setNewsData) => {
     throw error;
   }
 };
-

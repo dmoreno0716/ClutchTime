@@ -6,7 +6,6 @@ export const fetchAllLeagueInfo = async (setLeagueInfo, league, season) => {
       `http://localhost:3002/dashboard/allMatches/${league}/${season}`
     );
     setLeagueInfo(response.data);
-    console.log(response.data);
     return response.data;
   } catch (error) {
     console.error("Error fetching user info:", error);
