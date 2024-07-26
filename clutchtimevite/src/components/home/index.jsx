@@ -159,6 +159,7 @@ const Home = () => {
     zIndex: 1000,
     boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
     width: "100%",
+    color: "black",
   };
 
   const userCardStyle = {

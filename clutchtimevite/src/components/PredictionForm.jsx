@@ -12,7 +12,10 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase/firebase";
 import { useAuth } from "../contexts/authContext";
-import { fetchScheduledGamesInLeagueInfo } from "../services/api/getMatchDetails";
+import {
+  fetchScheduledGamesInLeagueInfo,
+  fetchAllFinishedGamesInLeagueInfo,
+} from "../services/api/getMatchDetails";
 
 const PredictionForm = ({ onPredictionPost }) => {
   const [upcomingGames, setUpcomingGames] = useState([]);
@@ -75,6 +78,62 @@ const PredictionForm = ({ onPredictionPost }) => {
     },
   };
 
+  //   useEffect(() => {
+  //     const fetchGamesAndStats = async () => {
+  //       if (!currentUser) {
+  //         console.log("No current User, not fetching games");
+  //         return;
+  //       }
+
+  //       try {
+  //         const leagueId = "bl1";
+  //         const games = await fetchScheduledGamesInLeagueInfo(leagueId, "2024");
+
+  //         if (!Array.isArray(games)) {
+  //           console.error("Fetched games is not an array:", games);
+  //           return;
+  //         }
+
+  //         const gamesWithLeagueId = games.map((game) => ({ ...game, leagueId }));
+
+  //         const uniqueGames = Array.from(
+  //           new Map(
+  //             gamesWithLeagueId.map((game) => [game.matchID, game])
+  //           ).values()
+  //         );
+
+  //         uniqueGames.sort(
+  //           (a, b) => new Date(a.matchDateTime) - new Date(b.matchDateTime)
+  //         );
+
+  //         setUpcomingGames(uniqueGames);
+
+  //         const allTeamStats = {};
+  //         for (const game of uniqueGames) {
+  //           if (!allTeamStats[game.team1.teamId]) {
+  //             allTeamStats[game.team1.teamId] = await fetchTeamStats(
+  //               leagueId,
+  //               game.team1.teamId
+  //             );
+  //           }
+  //           if (!allTeamStats[game.team2.teamId]) {
+  //             allTeamStats[game.team2.teamId] = await fetchTeamStats(
+  //               leagueId,
+  //               game.team2.teamId
+  //             );
+  //           }
+  //         }
+
+  //         const initialRatings = calculateInitialRatings(allTeamStats);
+  //         setTeamRatings(initialRatings);
+  //       } catch (error) {
+  //         console.error("Error fetching scheduled games and team stats:", error);
+  //       }
+  //     };
+
+  //     fetchGamesAndStats();
+  //   }, [currentUser]);
+
   useEffect(() => {
     const fetchGamesAndStats = async () => {
       if (!currentUser) {
@@ -85,6 +144,12 @@ const PredictionForm = ({ onPredictionPost }) => {
       try {
         const leagueId = "bl1";
         const games = await fetchScheduledGamesInLeagueInfo(leagueId, "2024");
+        const finishedGames = await fetchAllFinishedGamesInLeagueInfo(
+          leagueId,
+          "2023"
+        );
+
+        console.log("Finished games:", finishedGames);
 
         if (!Array.isArray(games)) {
           console.error("Fetched games is not an array:", games);
@@ -121,8 +186,13 @@ const PredictionForm = ({ onPredictionPost }) => {
           }
         }
 
-        const initialRatings = calculateInitialRatings(allTeamStats);
-        setTeamRatings(initialRatings);
+        let initialRatings = calculateInitialRatings(allTeamStats);
+        console.log("Initial ratings:", initialRatings);
+
+        let updatedRatings = updateRatings(initialRatings, finishedGames);
+        console.log("Updated ratings:", updatedRatings);
+
+        setTeamRatings(updatedRatings);
       } catch (error) {
         console.error("Error fetching scheduled games and team stats:", error);
       }
@@ -195,36 +265,106 @@ const PredictionForm = ({ onPredictionPost }) => {
     }
   };
 
+  //if teamA is stronger than teamB and teamB WINS, then teamB's rating skyrockets
+  //go through matches for teams, if teamA wins from teamB, then teamA becomes 1550, teamB becomes 1350
+  //point system; for all matches; MATCH DATA NOT TEAM DATA
+
   const calculateInitialRatings = (allTeamStats) => {
     const ratings = {};
-
-    // Initialize ratings
     Object.keys(allTeamStats).forEach((teamId) => {
       ratings[teamId] = 1500; // Start with a base rating of 1500
     });
-
-    // Calculate ratings based on overall stats instead of individual matches
-    Object.entries(allTeamStats).forEach(([teamId, stats]) => {
-      if (!stats) {
-        console.warn(`No stats for team ${teamId}`);
-        return;
-      }
-
-      const totalMatches = stats.wins + stats.draws + stats.losses;
-      if (totalMatches === 0) {
-        console.warn(`No matches played by team ${teamId}`);
-        return;
-      }
-
-      const winRatio = stats.wins / totalMatches;
-      const goalDifference = stats.goalsScored - stats.goalsConceded;
-
-      // Adjust rating based on win ratio and goal difference
-      ratings[teamId] += (winRatio - 0.5) * 200 + goalDifference * 10;
-    });
-
     return ratings;
   };
+
+  const updateRatings = (ratings, matchResults) => {
+    console.log("Updating ratings with match results:", matchResults);
+    const newRatings = { ...ratings };
+
+    matchResults.forEach((match) => {
+      const homeTeamId = match.team1.teamId;
+      const awayTeamId = match.team2.teamId;
+      const homeScore = match.matchResults[0]?.pointsTeam1 || 0;
+      const awayScore = match.matchResults[0]?.pointsTeam2 || 0;
+
+      if (!newRatings[homeTeamId] || !newRatings[awayTeamId]) {
+        console.log(
+          `Skipping match, missing rating for team: ${homeTeamId} or ${awayTeamId}`
+        );
+        return;
+      }
+
+      const homeRating = newRatings[homeTeamId];
+      const awayRating = newRatings[awayTeamId];
+
+      console.log(
+        `Before update: ${match.team1.teamName}(${homeTeamId}): ${homeRating}, ${match.team2.teamName}(${awayTeamId}): ${awayRating}`
+      );
+
+      const expectedHomeScore =
+        1 / (1 + Math.pow(10, (awayRating - homeRating) / 400));
+      const expectedAwayScore = 1 - expectedHomeScore;
+
+      const actualHomeScore =
+        homeScore > awayScore ? 1 : homeScore === awayScore ? 0.5 : 0;
+      const actualAwayScore = 1 - actualHomeScore;
+
+      // Calculate the upset factor
+      const upsetFactor = Math.abs(actualHomeScore - expectedHomeScore);
+
+      // Adjust K based on the upset factor
+      const baseK = 32;
+      const k = baseK * (1 + upsetFactor * 2); // This will increase K for unexpected results
+
+      const homeRatingChange = k * (actualHomeScore - expectedHomeScore);
+      const awayRatingChange = k * (actualAwayScore - expectedAwayScore);
+
+      newRatings[homeTeamId] += homeRatingChange;
+      newRatings[awayTeamId] += awayRatingChange;
+
+      console.log(
+        `After update: ${match.team1.teamName}(${homeTeamId}): ${newRatings[homeTeamId]}, ${match.team2.teamName}(${awayTeamId}): ${newRatings[awayTeamId]}`
+      );
+      console.log(
+        `Rating changes: Home ${homeRatingChange.toFixed(
+          2
+        )}, Away ${awayRatingChange.toFixed(2)}`
+      );
+    });
+
+    return newRatings;
+  };
+
+  //   const calculateInitialRatings = (allTeamStats) => {
+  //     const ratings = {};
+
+  //     // Initialize ratings
+  //     Object.keys(allTeamStats).forEach((teamId) => {
+  //       ratings[teamId] = 1500; // Start with a base rating of 1500
+  //     });
+
+  //     // Calculate ratings based on overall stats instead of individual matches
+  //     Object.entries(allTeamStats).forEach(([teamId, stats]) => {
+  //       if (!stats) {
+  //         console.warn(`No stats for team ${teamId}`);
+  //         return;
+  //       }
+
+  //       const totalMatches = stats.wins + stats.draws + stats.losses;
+  //       if (totalMatches === 0) {
+  //         console.warn(`No matches played by team ${teamId}`);
+  //         return;
+  //       }
+
+  //       const winRatio = stats.wins / totalMatches;
+  //       const goalDifference = stats.goalsScored - stats.goalsConceded;
+
+  //       // Adjust rating based on win ratio and goal difference
+  //       ratings[teamId] += (winRatio - 0.5) * 200 + goalDifference * 10;
+  //     });
+
+  //     return ratings;
+  //   };
 
   const calculateRating = (stats, initialRating) => {
     if (!stats) return initialRating;
@@ -237,37 +377,75 @@ const PredictionForm = ({ onPredictionPost }) => {
 
     // Adjust rating based on win ratio and goal difference
     return initialRating + (winRatio - 0.5) * 200 + goalDifference * 10;
-
   };
 
-  const calculateWinProbability = (teamStats, opponentStats, teamRatings) => {
+  //   const calculateWinProbability = (teamStats, opponentStats, teamRatings) => {
+  //     if (
+  //       !teamStats ||
+  //       !opponentStats ||
+  //       !teamRatings ||
+  //       !teamStats.teamId ||
+  //       !opponentStats.teamId
+  //     ) {
+  //       console.log("Missing stats or ratings");
+  //       return 0;
+  //     }
+
+  //     const teamId = teamStats.teamId;
+  //     const opponentId = opponentStats.teamId;
+
+  //     if (!teamRatings[teamId] || !teamRatings[opponentId]) {
+  //       console.log("Missing team ratings");
+  //       return 0;
+  //     }
+
+  //     const teamRating = calculateRating(teamStats, teamRatings[teamId]);
+  //     const opponentRating = calculateRating(
+  //       opponentStats,
+  //       teamRatings[opponentId]
+  //     );
+
+  //     const ratingDifference = teamRating - opponentRating;
+  //     const winProbability = 1 / (1 + Math.pow(10, -ratingDifference / 400));
+
+  //     return Math.round(winProbability * 100);
+  //   };
+
+  const calculateWinProbability = (team, opponent, teamRatings) => {
     if (
-      !teamStats ||
-      !opponentStats ||
+      !team ||
+      !opponent ||
       !teamRatings ||
-      !teamStats.teamId ||
-      !opponentStats.teamId
+      !team.teamId ||
+      !opponent.teamId
     ) {
-      console.log("Missing stats or ratings");
+      console.log("Missing team data or ratings", {
+        team,
+        opponent,
+        teamRatings,
+      });
       return 0;
     }
 
-    const teamId = teamStats.teamId;
-    const opponentId = opponentStats.teamId;
+    const teamId = team.teamId;
+    const opponentId = opponent.teamId;
 
     if (!teamRatings[teamId] || !teamRatings[opponentId]) {
-      console.log("Missing team ratings");
+      console.log("Missing team ratings", { teamId, opponentId, teamRatings });
       return 0;
     }
 
-    const teamRating = calculateRating(teamStats, teamRatings[teamId]);
-    const opponentRating = calculateRating(
-      opponentStats,
-      teamRatings[opponentId]
+    const teamRating = teamRatings[teamId];
+    const opponentRating = teamRatings[opponentId];
+
+    console.log(
+      `Calculating probability: ${team.teamName}(${teamId}): ${teamRating} vs ${opponent.teamName}(${opponentId}): ${opponentRating}`
     );
 
-    const ratingDifference = teamRating - opponentRating;
-    const winProbability = 1 / (1 + Math.pow(10, -ratingDifference / 400));
+    const winProbability =
+      1 / (1 + Math.pow(10, (opponentRating - teamRating) / 400));
+
+    console.log(`Win probability for ${team.teamName}: ${winProbability}`);
 
     return Math.round(winProbability * 100);
   };
@@ -362,25 +540,41 @@ const PredictionForm = ({ onPredictionPost }) => {
                 (g) => g.matchID === selectedGame
               ).team2;
 
+              console.log(
+                "Calculating probabilities for:",
+                homeTeam.teamName,
+                "vs",
+                awayTeam.teamName
+              );
+              console.log("Current team ratings:", teamRatings);
+
               if (
                 !homeTeamStats ||
                 !awayTeamStats ||
                 !teamRatings[homeTeam.teamId] ||
                 !teamRatings[awayTeam.teamId]
               ) {
+                console.log("Missing data for probability calculation", {
+                  homeTeamStats,
+                  awayTeamStats,
+                  homeTeamRating: teamRatings[homeTeam.teamId],
+                  awayTeamRating: teamRatings[awayTeam.teamId],
+                });
                 return <p>Loading probabilities...</p>;
               }
 
               const homeProb = calculateWinProbability(
-                { ...homeTeamStats, teamId: homeTeam.teamId },
-                { ...awayTeamStats, teamId: awayTeam.teamId },
+                { ...homeTeam, ...homeTeamStats },
+                { ...awayTeam, ...awayTeamStats },
                 teamRatings
               );
               const awayProb = calculateWinProbability(
-                { ...awayTeamStats, teamId: awayTeam.teamId },
-                { ...homeTeamStats, teamId: homeTeam.teamId },
+                { ...awayTeam, ...awayTeamStats },
+                { ...homeTeam, ...homeTeamStats },
                 teamRatings
               );
+
+              console.log("Calculated probabilities:", { homeProb, awayProb });
 
               if (isNaN(homeProb) || isNaN(awayProb)) {
                 return <p>Unable to calculate probabilities</p>;
