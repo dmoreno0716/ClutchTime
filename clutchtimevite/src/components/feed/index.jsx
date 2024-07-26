@@ -350,14 +350,25 @@ const Feed = () => {
 
       // Fetch recommended news based on keywords
       const newRecommendedNews = await fetchRecommendedNews(keywords);
+      console.log("New recommended news to be added:", newRecommendedNews);
 
       // Update allContent state with new recommended news
       setAllContent((prevContent) => {
         const existingIds = new Set(prevContent.map((item) => item.id));
         const newContent = [
           ...prevContent,
-          ...newRecommendedNews.filter((item) => !existingIds.has(item.id)),
+          ...newRecommendedNews
+            .filter((item) => !existingIds.has(item.id))
+            .map((item) => ({
+              ...item,
+              id: item.id || `recommended_${Date.now()}_${Math.random()}`,
+              type: "recommended",
+              league: item.league || "Unknown",
+              likes: [],
+              comments: [],
+            })),
         ];
+
         // Sort newContent by date
         return newContent.sort((a, b) => {
           const getDate = (item) => {
@@ -442,21 +453,21 @@ const Feed = () => {
     }
   };
 
-  const fetchRecommendedNews = async (keywords) => {
-    try {
-      const response = await axios.post(
-        "http://localhost:3002/news/recommended",
-        {
-          keywords: keywords || [],
-          userId: currentUser.uid,
-        }
-      );
-      return response.data;
-    } catch (error) {
-      console.error("Error fetching recommended news:", error);
-      return []; // Return an empty array in case of error
-    }
-  };
+  // const fetchRecommendedNews = async (keywords) => {
+  //   try {
+  //     const response = await axios.post(
+  //       "http://localhost:3002/news/recommended",
+  //       {
+  //         keywords: keywords || [],
+  //         userId: currentUser.uid,
+  //       }
+  //     );
+  //     return response.data;
+  //   } catch (error) {
+  //     console.error("Error fetching recommended news:", error);
+  //     return []; // Return an empty array in case of error
+  //   }
+  // };
 
   //ALGORITHM FOR LIKING POSTS
   const handleLike = async (postId) => {
@@ -621,9 +632,32 @@ const Feed = () => {
   };
 
   const extractKeywords = (text) => {
-    const words = text.toLowerCase().split(/\W+/); //converts text to lowercas and splits into words
+    const words = text.toLowerCase().split(/\W+/);
+    return words.filter((word) => word && !stopwords.includes(word));
+  };
 
-    return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
+  const fetchRecommendedNews = async (keywords) => {
+    try {
+      console.log("Fetching recommended news with keywords:", keywords);
+      const response = await axios.post(
+        "http://localhost:3002/news/recommended",
+        {
+          keywords: keywords,
+          userId: currentUser.uid,
+        }
+      );
+
+      // Remove duplicates based on article URL
+      const uniqueNews = Array.from(
+        new Set(response.data.map((article) => article.url))
+      ).map((url) => response.data.find((article) => article.url === url));
+
+      console.log("Received unique recommended news:", uniqueNews);
+      return uniqueNews;
+    } catch (error) {
+      console.error("Error fetching recommended news:", error);
+      return [];
+    }
   };
 
   const updateWordWeights = async (newsItem) => {
@@ -655,6 +689,41 @@ const Feed = () => {
     }
   };
 
+  // const extractKeywords = (text) => {
+  //   const words = text.toLowerCase().split(/\W+/); //converts text to lowercas and splits into words
+
+  //   return words.filter((word) => word && !stopwords.includes(word)); //filters out stopwords and empty string
+  // };
+
+  // const updateWordWeights = async (newsItem) => {
+  //   try {
+  //     const keywords = extractKeywords(
+  //       newsItem.title + " " + newsItem.description
+  //     );
+  //     const userRef = doc(db, "users", currentUser.uid);
+
+  //     await updateDoc(userRef, {
+  //       preferredKeywords: arrayUnion(...keywords),
+  //     });
+
+  //     const wordWeightsRef = doc(db, "wordWeights", "latest");
+  //     await runTransaction(db, async (transaction) => {
+  //       const wordWeightsDoc = await transaction.get(wordWeightsRef);
+  //       const currentWeights = wordWeightsDoc.exists()
+  //         ? wordWeightsDoc.data()
+  //         : {};
+
+  //       keywords.forEach((word) => {
+  //         currentWeights[word] = (currentWeights[word] || 0) + 1;
+  //       });
+
+  //       transaction.set(wordWeightsRef, currentWeights);
+  //     });
+  //   } catch (error) {
+  //     console.error("Error updating word weights:", error);
+  //   }
+  // };
+
   return (
     <div style={styles.app}>
       <Sidebar />
@@ -685,6 +754,16 @@ const Feed = () => {
                   styles={styles}
                   userFullName={item.userFullName}
                 ></PredictionPost>
+              );
+            } else if (item.league || item.type === "recommended") {
+              return (
+                <PostCard
+                  key={`news-${item.id}-${index}`}
+                  newsItem={item}
+                  onLike={handleNewsLike}
+                  onComment={handleNewsComment}
+                  styles={styles}
+                ></PostCard>
               );
             } else {
               // This is a post

@@ -37,7 +37,6 @@ export const fetchScheduledGamesInLeagueInfo = async (league, year) => {
       console.error("Unexpected response format:", response.data);
       return [];
     }
-
   } catch (error) {
     console.error(`Error fetching scheduled games for ${league}:`, error);
     return [];
@@ -59,7 +58,7 @@ export const fetchAllFinishedGamesInLeagueInfo = async (league, year) => {
     const response = await axios.get(
       `${API_BASE_URL}/finishedMatches/${league}/${year}`
     );
-    return response.data.slice(0, 15); // Limit to 15 games
+    return response.data.slice(0, 20); // Limit to 20 games
   } catch (error) {
     console.error(`Error fetching finished games for ${league}:`, error);
     return [];
