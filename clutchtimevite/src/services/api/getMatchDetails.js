@@ -31,7 +31,13 @@ export const fetchScheduledGamesInLeagueInfo = async (league, year) => {
     const response = await axios.get(
       `${API_BASE_URL}/scheduledMatches/${league}/${year}`
     );
-    return response.data.slice(0, 15); // Limit to 15 games
+    if (Array.isArray(response.data)) {
+      return response.data;
+    } else {
+      console.error("Unexpected response format:", response.data);
+      return [];
+    }
+
   } catch (error) {
     console.error(`Error fetching scheduled games for ${league}:`, error);
     return [];
