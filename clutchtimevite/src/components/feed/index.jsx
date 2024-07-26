@@ -224,98 +224,9 @@ const Feed = () => {
   const [allContent, setAllContent] = useState([]);
   const [recommendedNews, setRecommendedNews] = useState([]);
 
-  const fetchUserName = async (userId) => {
-    if (userNames[userId]) {
-      return userNames[userId];
-    }
-
-    try {
-      const userDoc = await getDoc(doc(db, "users", userId));
-      if (userDoc.exists()) {
-        const fullName = userDoc.data().fullName;
-        setUserNames((prev) => ({ ...prev, [userId]: fullName }));
-        return fullName;
-      }
-    } catch (error) {
-      console.error("Error fetching user name: ", error);
-    }
-    return "Unknown user";
-  };
-
   const { ref, inView } = useInView({
     threshold: 0,
   });
-
-  const fetchPosts = useCallback(
-    async (lastDoc = null) => {
-      if (!currentUser || loading || !hasMore) return;
-
-      setLoading(true);
-      const postsRef = collection(db, "posts");
-
-      try {
-        const userDocRef = doc(db, "users", currentUser.uid);
-        const userDocSnap = await getDoc(userDocRef);
-
-        if (!userDocSnap.exists()) {
-          setLoading(false);
-          return;
-        }
-        const userData = userDocSnap.data();
-        const following = userData.followingUsers || [];
-
-        let q = query(
-          postsRef,
-          where("authorId", "in", [currentUser.uid, ...following]),
-          orderBy("timestamp", "desc"),
-          limit(10)
-        );
-
-        if (lastDoc) {
-          q = query(q, startAfter(lastDoc));
-        }
-
-        const querySnapshot = await getDocs(q);
-
-        const fetchedPosts = await Promise.all(
-          querySnapshot.docs.map(async (postDoc) => {
-            const postData = postDoc.data();
-            const authorDocRef = doc(db, "users", postData.authorId);
-            const authorDocSnap = await getDoc(authorDocRef);
-            const authorData = authorDocSnap.exists()
-              ? authorDocSnap.data()
-              : {};
-
-            return {
-              id: postDoc.id,
-              ...postData,
-            };
-          })
-        );
-
-        setPosts((prevPosts) => [...prevPosts, ...fetchedPosts]);
-        setLastVisible(querySnapshot.docs[querySnapshot.docs.length - 1]);
-        setHasMore(querySnapshot.docs.length === 10);
-      } catch (error) {
-        console.error("Error fetching posts", error);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [currentUser, loading, hasMore]
-  );
-
-  useEffect(() => {
-    if (currentUser && !loading && hasMore) {
-      fetchPosts();
-    }
-  }, [currentUser, fetchPosts, loading, hasMore]);
-
-  useEffect(() => {
-    if (inView && !loading && hasMore) {
-      fetchPosts(lastVisible);
-    }
-  }, [inView, fetchPosts, lastVisible, loading, hasMore]);
 
   useEffect(() => {
     const fetchUserLeaguesAndNews = async () => {
@@ -546,25 +457,6 @@ const Feed = () => {
       return []; // Return an empty array in case of error
     }
   };
-
-  useEffect(() => {
-    const combineContent = async () => {
-      let recommendedNews = [];
-      if (news.length > 0) {
-        recommendedNews = await fetchRecommendedNews();
-      }
-      const sortedContent = [...news, ...recommendedNews, ...posts].sort(
-        (a, b) => {
-          const dateA = a.date ? new Date(a.date) : a.timestamp;
-          const dateB = b.date ? new Date(b.date) : b.timestamp;
-          return dateB - dateA;
-        }
-      );
-      setAllContent(sortedContent);
-    };
-
-    combineContent();
-  }, [news, posts]);
 
   //ALGORITHM FOR LIKING POSTS
   const handleLike = async (postId) => {
