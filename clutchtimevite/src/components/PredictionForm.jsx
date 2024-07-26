@@ -190,6 +190,7 @@ const PredictionForm = ({ onPredictionPost }) => {
         `Error fetching team stats for team ${teamId} in league ${leagueId}:`,
         error
       );
+
       return null;
     }
   };
@@ -236,6 +237,7 @@ const PredictionForm = ({ onPredictionPost }) => {
 
     // Adjust rating based on win ratio and goal difference
     return initialRating + (winRatio - 0.5) * 200 + goalDifference * 10;
+
   };
 
   const calculateWinProbability = (teamStats, opponentStats, teamRatings) => {
@@ -393,6 +395,7 @@ const PredictionForm = ({ onPredictionPost }) => {
               return (
                 <>
                   <p style={{ color: "red" }}>CLUTCHTIME PROBABILITIES</p>
+
                   <p>
                     {homeTeam.teamName} Win Probability: {adjustHomeProb}%
                   </p>

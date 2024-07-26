@@ -37,6 +37,7 @@ export const fetchScheduledGamesInLeagueInfo = async (league, year) => {
       console.error("Unexpected response format:", response.data);
       return [];
     }
+
   } catch (error) {
     console.error(`Error fetching scheduled games for ${league}:`, error);
     return [];

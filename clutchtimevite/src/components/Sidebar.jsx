@@ -12,6 +12,7 @@ const Sidebar = () => {
   const [followedLeagues, setFollowedLeagues] = useState([]);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+
   const navigate = useNavigate();
 
   const sidebarStyle = {
@@ -64,6 +65,7 @@ const Sidebar = () => {
             setFollowedLeagues(userData.followedLeagues || []);
             setFollowersCount(userData.followers?.length || 0);
             setFollowingCount(userData.following?.length || 0);
+
           }
         } catch (error) {
           console.error("Error fetching data: ", error);
